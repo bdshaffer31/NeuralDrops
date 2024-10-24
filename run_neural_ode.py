@@ -115,7 +115,7 @@ def main():
     traj_len = 64
     num_epochs = 4
     lr = 1e-3
-    hidden_dim = 16
+    hidden_dim = 64
     num_hidden_layers = 2
     batch_size = 32
 

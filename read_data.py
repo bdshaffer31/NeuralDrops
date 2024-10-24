@@ -69,6 +69,7 @@ class Standardizer:
     def set_norm(self, data):
         """Set the normalization parameters based on the provided data."""
         # hack to handle y_traj fix later
+        # new comment
         if len(data.shape) == 3:
             self.max = torch.max(data, dim=(0,1), keepdim=True)[0]
             self.min = torch.min(data, dim=(0,1), keepdim=True)[0]
