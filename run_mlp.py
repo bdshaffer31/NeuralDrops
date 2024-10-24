@@ -87,9 +87,9 @@ def validate_model(model, val_loader, loss_fn):
 def main():
     all_data_dict = read_data.load_drop_data_from_xlsx()
     first_dataset = all_data_dict["0.5wt% 20C"]
-    data_inds = [1,2,-1]
+    data_inds = [1, 2, -1]
     # data_inds = [1, 2]
-    data_labels = ['Radius', "Height", "Contact Angle"]
+    data_labels = ["Radius", "Height", "Contact Angle"]
     dataset = first_dataset[1:-20, data_inds]
     x = dataset[:-1]
     y = dataset[1:]
@@ -154,8 +154,8 @@ def main():
     plt.show()
 
     for i in range(x.shape[1]):
-        plt.plot(x[:,i], label=data_labels[i])
-    plt.xlabel('t')
+        plt.plot(x[:, i], label=data_labels[i])
+    plt.xlabel("t")
     plt.legend()
     plt.show()
 
@@ -168,12 +168,11 @@ def main():
         x_hist = torch.stack(x_hist)
 
     for i in range(x.shape[1]):
-        plt.plot(x[:,i], label=f'True: {data_labels[i]}')
-        plt.plot(x_hist[:,i], label=f'Predicted: {data_labels[i]}')
-    plt.xlabel('t')
+        plt.plot(x[:, i], label=f"True: {data_labels[i]}")
+        plt.plot(x_hist[:, i], label=f"Predicted: {data_labels[i]}")
+    plt.xlabel("t")
     plt.legend()
     plt.show()
-
 
 
 if __name__ == "__main__":
