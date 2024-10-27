@@ -6,175 +6,39 @@ import matplotlib.pyplot as plt
 import scipy.io
 from torch import nn
 
-import os
-import json
-import torch
-import h5py
-import logging
-from datetime import datetime
+
+def setup_node_data(traj_len, batch_size, temporal_stride=10):
+    # split this into a seperate file later
+    # expand this class to handle more options
+    # (which file to include, how to process)
+    dataset = load_test_mat_file()[::temporal_stride]
+    dataset, _ = detrend_dataset(dataset, window_size=150)
+    dataset = center_data(dataset)
+
+    traj_len = traj_len
+    x_init, y_traj = create_trajectories(dataset, traj_len=traj_len)
+    train_loader, val_loader, normalizer = setup_dataloaders(
+        x_init, y_traj, test_size=0.1, batch_size=batch_size, feature_norm=False
+    )
+    return dataset, train_loader, val_loader, normalizer
 
 
-class ExperimentLogger:
-    def __init__(
-        self, save_dir="experiments", run_dir="run", use_timestamp=True, config=None
-    ):
-        # Set up a unique directory for each run
-        if use_timestamp:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            run_dir = f"{run_dir}_{timestamp}"
-        self.save_dir = os.path.join(save_dir, run_dir)
-        self.def_name_idx = 0
-        self.best_metric = None
-        os.makedirs(self.save_dir, exist_ok=True)
+def create_trajectories(x, traj_len=32):
+    """
+    Create training data where each time step acts as an initial condition,
+    and the subsequent points in the trajectory form the ground truth, with variable lengths.
+    """
+    x_init = []
+    y_traj = []
 
-        self.setup_logging()
+    for i in range(len(x) - traj_len):
+        x_init.append(x[i])
+        y_traj.append(x[i + 1 : i + traj_len + 1])
 
-        if config:
-            self.log_config(config)
+    x_init = torch.stack(x_init)
+    y_traj = torch.stack(y_traj)
 
-        logging.info("Experiment Logger initialized.")
-        self.metrics_file_path = os.path.join(self.save_dir, "metrics.npz")
-        self.metrics = {"epoch": []}
-
-    def setup_logging(self, level=logging.INFO):
-        # Set up logging to both file and console
-        log_file_path = os.path.join(self.save_dir, "experiment.log")
-        logging.basicConfig(
-            level=level,
-            format="%(asctime)s - %(levelname)s - %(message)s",
-            handlers=[
-                logging.FileHandler(log_file_path),
-                # logging.StreamHandler()  # Prints logs to console as well
-            ],
-        )
-
-    def log_config(self, config, config_name="config.json"):
-        file_path = os.path.join(self.save_dir, config_name)
-        with open(file_path, "w") as f:
-            json.dump(config, f, indent=4)
-        logging.info("Configuration saved.")
-
-    def log_metrics(self, metrics, epoch):
-        # Append metrics to the in-memory dictionary
-        self.metrics["epoch"].append(epoch)
-        for key, value in metrics.items():
-            if key not in self.metrics:
-                self.metrics[key] = []
-            self.metrics[key].append(value)
-
-        np.savez(self.metrics_file_path, **self.metrics)
-
-    def load_metrics(self):
-        return dict(np.load(self.metrics_file_path))
-
-    def save_checkpoint(self, model, optimizer, epoch, file_name="checkpoint.pth"):
-        checkpoint = {
-            "epoch": epoch,
-            "model_state_dict": model.state_dict(),
-            "optimizer_state_dict": optimizer.state_dict(),
-        }
-        file_path = os.path.join(self.save_dir, file_name)
-        torch.save(checkpoint, file_path)
-        logging.info(f"Checkpoint saved at epoch {epoch}.")
-
-    def save_model(self, model, file_name="model.pth"):
-        file_path = os.path.join(self.save_dir, file_name)
-        torch.save(model.state_dict(), file_path)
-
-    def save_best_model(self, model, metric, file_name="best_model.pth"):
-        if self.best_metric is None or metric > self.best_metric:
-            self.best_metric = metric
-            self.save_model(model, file_name)
-            logging.info("Best model saved.")
-
-    def save_h5(self, data, file_name="results.h5"):
-        file_path = os.path.join(self.save_dir, file_name)
-        with h5py.File(file_path, "a") as f:
-            for key, value in data.items():
-                f.create_dataset(key, data=value)
-        logging.info("Data saved in HDF5 format.")
-
-    def show(self, input_plot, ext=".png", file_name=None):
-        if file_name is None:
-            file_name = self.get_def_name()
-        rel_filepath = self.get_relpath(f"{file_name}{ext}")
-        input_plot.savefig(rel_filepath, bbox_inches="tight", transparent=False)
-        input_plot.clf()
-        input_plot.close()
-
-    def show_anim(self, input_anim, ext=".gif", file_name=None):
-        if file_name is None:
-            file_name = self.get_def_name()
-        rel_filepath = self.get_relpath(f"{file_name}{ext}")
-        input_anim.save(rel_filepath, writer="ffmpeg")
-
-    def get_def_name(self):
-        file_name = f"img_{self.def_name_idx}"
-        self.def_name_idx += 1
-        return file_name
-
-    def get_relpath(self, fn):
-        return os.path.join(self.save_dir, fn)
-
-
-class LogLoader:
-    def __init__(self, run_dir, save_dir="experiments", config=None):
-        # Set up a unique directory for each run
-        self.save_dir = os.path.join(save_dir, run_dir)
-        self.def_name_idx = 0
-
-    def get_relpath(self, fn):
-        return os.path.join(self.save_dir, fn)
-
-    def load_metrics(self):
-        metrics_path = self.get_relpath("metrics.npz")
-        return dict(np.load(metrics_path))
-
-    def load_config(self):
-        config_path = self.get_relpath("config.json")
-        with open(config_path, "r") as f:
-            config = json.load(f)
-        return config
-
-    def show(self, input_plot, ext=".png", file_name=None):
-        if file_name is None:
-            file_name = self.get_def_name()
-        rel_filepath = self.get_relpath(f"{file_name}{ext}")
-        input_plot.savefig(rel_filepath, bbox_inches="tight", transparent=False)
-        input_plot.clf()
-        input_plot.close()
-
-    def show_anim(self, input_anim, ext=".gif", file_name=None):
-        if file_name is None:
-            file_name = self.get_def_name()
-        rel_filepath = self.get_relpath(f"{file_name}{ext}")
-        input_anim.save(rel_filepath, writer="ffmpeg")
-
-    def get_def_name(self):
-        file_name = f"img_{self.def_name_idx}"
-        self.def_name_idx += 1
-        return file_name
-
-
-def get_activation(activation_name):
-    activations = {
-        "relu": nn.ReLU(),
-        "leaky_relu": nn.LeakyReLU(),
-        "sigmoid": nn.Sigmoid(),
-        "tanh": nn.Tanh(),
-        "softplus": nn.Softplus(),
-        "elu": nn.ELU(),
-        "selu": nn.SELU(),
-        "gelu": nn.GELU(),
-        "swish": nn.SiLU(),  # SiLU is often referred to as Swish
-        "softmax": nn.Softmax(dim=1),  # Specify dim if using softmax
-        "identity": nn.Identity(),
-    }
-    activation = activations.get(activation_name.lower())
-    if activation is None:
-        raise ValueError(f"Activation function '{activation_name}' is not supported.")
-    return activation
-
+    return x_init, y_traj
 
 def load_drop_data_from_xlsx(excel_file="data\Qualifying Exam Data.xlsx"):
     """Load in the drop data into a dictionary of tensors"""
