@@ -4,18 +4,20 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 import scipy.io
+from torch import nn
 
 import os
 import json
 import torch
-import shutil
-import csv
 import h5py
 import logging
 from datetime import datetime
 
+
 class ExperimentLogger:
-    def __init__(self, save_dir, run_dir='run', use_timestamp=True, config=None):
+    def __init__(
+        self, save_dir="experiments", run_dir="run", use_timestamp=True, config=None
+    ):
         # Set up a unique directory for each run
         if use_timestamp:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -43,7 +45,7 @@ class ExperimentLogger:
             handlers=[
                 logging.FileHandler(log_file_path),
                 # logging.StreamHandler()  # Prints logs to console as well
-            ]
+            ],
         )
 
     def log_config(self, config, config_name="config.json"):
@@ -51,7 +53,7 @@ class ExperimentLogger:
         with open(file_path, "w") as f:
             json.dump(config, f, indent=4)
         logging.info("Configuration saved.")
-    
+
     def log_metrics(self, metrics, epoch):
         # Append metrics to the in-memory dictionary
         self.metrics["epoch"].append(epoch)
@@ -67,14 +69,14 @@ class ExperimentLogger:
 
     def save_checkpoint(self, model, optimizer, epoch, file_name="checkpoint.pth"):
         checkpoint = {
-            'epoch': epoch,
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict()
+            "epoch": epoch,
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
         }
         file_path = os.path.join(self.save_dir, file_name)
         torch.save(checkpoint, file_path)
         logging.info(f"Checkpoint saved at epoch {epoch}.")
-    
+
     def save_model(self, model, file_name="model.pth"):
         file_path = os.path.join(self.save_dir, file_name)
         torch.save(model.state_dict(), file_path)
@@ -91,7 +93,7 @@ class ExperimentLogger:
             for key, value in data.items():
                 f.create_dataset(key, data=value)
         logging.info("Data saved in HDF5 format.")
-    
+
     def show(self, input_plot, ext=".png", file_name=None):
         if file_name is None:
             file_name = self.get_def_name()
@@ -114,23 +116,64 @@ class ExperimentLogger:
     def get_relpath(self, fn):
         return os.path.join(self.save_dir, fn)
 
-class LogLoader():
-    def __init__(self, save_dir, run_dir, config=None):
+
+class LogLoader:
+    def __init__(self, run_dir, save_dir="experiments", config=None):
         # Set up a unique directory for each run
         self.save_dir = os.path.join(save_dir, run_dir)
+        self.def_name_idx = 0
 
     def get_relpath(self, fn):
         return os.path.join(self.save_dir, fn)
-    
+
     def load_metrics(self):
         metrics_path = self.get_relpath("metrics.npz")
         return dict(np.load(metrics_path))
-    
+
     def load_config(self):
         config_path = self.get_relpath("config.json")
         with open(config_path, "r") as f:
             config = json.load(f)
         return config
+
+    def show(self, input_plot, ext=".png", file_name=None):
+        if file_name is None:
+            file_name = self.get_def_name()
+        rel_filepath = self.get_relpath(f"{file_name}{ext}")
+        input_plot.savefig(rel_filepath, bbox_inches="tight", transparent=False)
+        input_plot.clf()
+        input_plot.close()
+
+    def show_anim(self, input_anim, ext=".gif", file_name=None):
+        if file_name is None:
+            file_name = self.get_def_name()
+        rel_filepath = self.get_relpath(f"{file_name}{ext}")
+        input_anim.save(rel_filepath, writer="ffmpeg")
+
+    def get_def_name(self):
+        file_name = f"img_{self.def_name_idx}"
+        self.def_name_idx += 1
+        return file_name
+
+
+def get_activation(activation_name):
+    activations = {
+        "relu": nn.ReLU(),
+        "leaky_relu": nn.LeakyReLU(),
+        "sigmoid": nn.Sigmoid(),
+        "tanh": nn.Tanh(),
+        "softplus": nn.Softplus(),
+        "elu": nn.ELU(),
+        "selu": nn.SELU(),
+        "gelu": nn.GELU(),
+        "swish": nn.SiLU(),  # SiLU is often referred to as Swish
+        "softmax": nn.Softmax(dim=1),  # Specify dim if using softmax
+        "identity": nn.Identity(),
+    }
+    activation = activations.get(activation_name.lower())
+    if activation is None:
+        raise ValueError(f"Activation function '{activation_name}' is not supported.")
+    return activation
 
 
 def load_drop_data_from_xlsx(excel_file="data\Qualifying Exam Data.xlsx"):
@@ -154,19 +197,23 @@ def load_drop_data_from_xlsx(excel_file="data\Qualifying Exam Data.xlsx"):
 
     return tensors
 
+
 def load_test_mat_file(filename="data\Test_Drop_Boundary.mat"):
     mat_data = scipy.io.loadmat(filename)
-    data = mat_data['bound']
-    numpy_data = np.array([frame[:,1] for frame in data[0]], dtype='float32')
-    processed_data = (numpy_data - np.min(numpy_data)) / (np.max(numpy_data) - np.min(numpy_data))
+    data = mat_data["bound"]
+    numpy_data = np.array([frame[:, 1] for frame in data[0]], dtype="float32")
+    processed_data = (numpy_data - np.min(numpy_data)) / (
+        np.max(numpy_data) - np.min(numpy_data)
+    )
     torch_data = torch.tensor(processed_data)
     return torch_data
+
 
 def detrend_dataset(dataset, window_size=10):
     # Compute the average profile across all images (along the image stack dimension)
     mean_profile = torch.mean(dataset, dim=0)
     profile_left = mean_profile[:window_size]
-    
+
     # Fit a linear trend to the mean profile
     x = torch.arange(profile_left.shape[0], dtype=torch.float32)
     A = torch.stack([x, torch.ones_like(x)], dim=1)
@@ -176,11 +223,12 @@ def detrend_dataset(dataset, window_size=10):
     x_full = torch.arange(dataset.shape[1], dtype=torch.float32)
     A_full = torch.stack([x_full, torch.ones_like(x_full)], dim=1)
     linear_trend = (A_full @ params).flatten()
-    
+
     # Subtract the linear trend from each image in the stack
-    detrended_dataset = dataset - (linear_trend[:]) # not sure why divide by 2
+    detrended_dataset = dataset - (linear_trend[:])  # not sure why divide by 2
 
     return detrended_dataset, linear_trend
+
 
 def end_pad_dataset(dataset, n_pad, force_zero=False):
     # append the last tensor in dataset n_pad times to the end
@@ -193,7 +241,8 @@ def end_pad_dataset(dataset, n_pad, force_zero=False):
     padded_dataset = torch.cat([dataset, padding], dim=0)
     return padded_dataset
 
-def center_data(dataset, mode='max'):
+
+def center_data(dataset, mode="max"):
     # for a 2d tensor dataset,
     # find the x index which corresponds to the maximum y value
     # find the distance from this max x value and the x value for the center of the data
@@ -203,12 +252,14 @@ def center_data(dataset, mode='max'):
     shift = center_index - max_index
     shift = torch.median(shift.int())
     shifted_dataset = torch.roll(dataset, shifts=int(shift), dims=1)
-    
+
     # Padding the data to keep the same shape
     if shift > 0:
         # If we shifted the data to the right, pad the beginning with the first row
         padding = shifted_dataset[0:1].repeat(shift, 1)
-        shifted_dataset = torch.cat([padding, shifted_dataset[:dataset.shape[0]-shift]], dim=0)
+        shifted_dataset = torch.cat(
+            [padding, shifted_dataset[: dataset.shape[0] - shift]], dim=0
+        )
     elif shift < 0:
         # If we shifted the data to the left, pad the end with the last row
         padding = shifted_dataset[-1:].repeat(-shift, 1)
@@ -241,7 +292,7 @@ class Normalizer:
             # Compute global mean and std over the entire dataset
             self.mean = torch.mean(data)
             self.std = torch.std(data)
-    
+
     def __call__(self, data):
         return self.apply(data)
 
@@ -252,7 +303,8 @@ class Normalizer:
     def inverse_apply(self, data):
         """Inverse the normalization to get the original data scale."""
         return (data * self.std) + self.mean
-    
+
+
 class Standardizer:
     def __init__(self, data=None, feature_wise=True):
         self.max = None
@@ -271,7 +323,7 @@ class Standardizer:
             # Compute global mean and std over the entire dataset
             self.max = torch.max(data)
             self.min = torch.min(data)
-    
+
     def __call__(self, data):
         return self.apply(data)
 
@@ -317,27 +369,50 @@ if __name__ == "__main__":
     # for key in tensor_dict:
     #     print(f"{key}, shape: {tensor_dict[key].shape}")
     boundary_tensor = load_test_mat_file()
-    print(boundary_tensor.shape, torch.max(boundary_tensor), torch.min(boundary_tensor), torch.mean(boundary_tensor), torch.std(boundary_tensor))
+    print(
+        boundary_tensor.shape,
+        torch.max(boundary_tensor),
+        torch.min(boundary_tensor),
+        torch.mean(boundary_tensor),
+        torch.std(boundary_tensor),
+    )
     import matplotlib.pyplot as plt
+
     for i in range(0, len(boundary_tensor), 100):
-        plt.plot(boundary_tensor[i], c='dimgrey', alpha=((len(boundary_tensor)/2)+1+i)/(2*len(boundary_tensor)))
+        plt.plot(
+            boundary_tensor[i],
+            c="dimgrey",
+            alpha=((len(boundary_tensor) / 2) + 1 + i) / (2 * len(boundary_tensor)),
+        )
     plt.show()
 
     detreneded_bv, linear_trend = detrend_dataset(boundary_tensor, window_size=150)
     for i in range(0, len(boundary_tensor), 100):
-        plt.plot(detreneded_bv[i], c='dimgrey', alpha=((len(detreneded_bv)/2)+1+i)/(2*len(detreneded_bv)))
+        plt.plot(
+            detreneded_bv[i],
+            c="dimgrey",
+            alpha=((len(detreneded_bv) / 2) + 1 + i) / (2 * len(detreneded_bv)),
+        )
     plt.show()
 
     for i in range(0, len(boundary_tensor), 100):
-        plt.plot(boundary_tensor[i], c='dimgrey', alpha=((len(boundary_tensor)/2)+1+i)/(2*len(boundary_tensor)))
+        plt.plot(
+            boundary_tensor[i],
+            c="dimgrey",
+            alpha=((len(boundary_tensor) / 2) + 1 + i) / (2 * len(boundary_tensor)),
+        )
     # Optionally plot the linear trend
-    plt.plot(linear_trend.numpy(), label='Linear Trend', color='red')
-    plt.title('Computed Linear Trend')
+    plt.plot(linear_trend.numpy(), label="Linear Trend", color="red")
+    plt.title("Computed Linear Trend")
     plt.show()
 
     # not quite right messes up dimensions
     shifted_bv = center_data(detreneded_bv)
     print(shifted_bv.shape)
     for i in range(0, len(shifted_bv), 100):
-        plt.plot(shifted_bv[i], c='dimgrey', alpha=((len(shifted_bv)/2)+1+i)/(2*len(shifted_bv)))
+        plt.plot(
+            shifted_bv[i],
+            c="dimgrey",
+            alpha=((len(shifted_bv) / 2) + 1 + i) / (2 * len(shifted_bv)),
+        )
     plt.show()

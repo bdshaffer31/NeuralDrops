@@ -5,6 +5,10 @@
     "hidden_dim": 128,
     "num_hidden_layers": 4,
     "batch_size": 32,
+    "solver": "rk4",
+    "activation_fn": "relu",
+    "manual_seed": 42,
+    "temporal_stride": 10,
     "input_dim": 1280,
     "output_dim": 1280
 }
