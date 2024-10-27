@@ -6,7 +6,7 @@ from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
-import read_data
+import utils
 
 
 class FCNN(torch.nn.Module):
@@ -85,7 +85,7 @@ def validate_model(model, val_loader, loss_fn):
 
 
 def main():
-    all_data_dict = read_data.load_drop_data_from_xlsx()
+    all_data_dict = utils.load_drop_data_from_xlsx()
     first_dataset = all_data_dict["0.5wt% 20C"]
     data_inds = [1, 2, -1]
     # data_inds = [1, 2]
