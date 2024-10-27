@@ -1,0 +1,10 @@
+{
+    "traj_len": 64,
+    "num_epochs": 50,
+    "lr": 0.01,
+    "hidden_dim": 128,
+    "num_hidden_layers": 4,
+    "batch_size": 32,
+    "input_dim": 1280,
+    "output_dim": 1280
+}
