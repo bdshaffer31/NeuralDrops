@@ -6,7 +6,7 @@ from tqdm import tqdm
 import networks
 import visualize
 import logger
-import utils
+import load_data
 
 
 def validate_node_model(model, time_steps, val_loader, loss_fn):
@@ -14,9 +14,9 @@ def validate_node_model(model, time_steps, val_loader, loss_fn):
     val_loss = 0.0
 
     with torch.no_grad():
-        for X_batch, y_batch in val_loader:
-            y_pred = model(X_batch, time_steps).transpose(0, 1)
-            loss = loss_fn(y_pred, y_batch)
+        for x_0, z, y in val_loader:
+            y_pred = model(x_0, z, time_steps).transpose(0, 1)
+            loss = loss_fn(y_pred, y)
             val_loss += loss.item()
 
     return val_loss / len(val_loader)
@@ -40,9 +40,9 @@ def train_node(
         model.train()
         epoch_loss = 0.0
 
-        for x_0, y_traj in train_loader:
+        for x_0, z, y_traj in train_loader:
             optimizer.zero_grad()
-            pred_y_traj = model(x_0, time_steps).transpose(0, 1)
+            pred_y_traj = model(x_0, z, time_steps).transpose(0, 1)
             loss = loss_fn(pred_y_traj, y_traj)
             loss.backward()
             optimizer.step()
@@ -62,14 +62,15 @@ def train_node(
         )
     logger.save_model(model, file_name="final_model.pth")
 
+
 def load_node_model_from_logger(log_loader):
     config = log_loader.load_config()
 
     input_dim = config.get("input_dim")
     output_dim = config.get("output_dim")
+    conditioning_dim = config.get("conditioning_dim")
     hidden_dim = config.get("hidden_dim")
     num_hidden_layers = config.get("num_hidden_layers")
-    solver = config.get("solver", "rk4")
     activation_fn = networks.get_activation(config["activation_fn"])
 
     # Load the best model from the logger
@@ -78,11 +79,12 @@ def load_node_model_from_logger(log_loader):
     ode_func = networks.ODE_FCNN(
         input_dim=input_dim,
         output_dim=output_dim,
+        conditioning_dim=conditioning_dim,
         hidden_dim=hidden_dim,
         num_hidden_layers=num_hidden_layers,
         activation_fn=activation_fn,
     )
-    model = networks.NeuralODE(ode_func, solver=solver)
+    model = networks.NeuralODE(ode_func, solver=config["solver"])
 
     # Load the best validation model
     best_model_path = log_loader.get_relpath("best_model.pth")
@@ -93,32 +95,41 @@ def load_node_model_from_logger(log_loader):
 
 
 def run_training(config, run_dir):
-    logger = logger.ExperimentLogger(run_dir=run_dir, use_timestamp=False)
+    exp_logger = logger.ExperimentLogger(run_dir=run_dir, use_timestamp=False)
 
     traj_len = config["traj_len"]
-    data = utils.setup_node_data(
-        traj_len, config["batch_size"], config["temporal_stride"]
+    data = load_data.setup_node_data(
+        traj_len,
+        batch_size=config["batch_size"],
+        exp_nums=config["exp_nums"],
+        temporal_subsample=config["temporal_subsample"],
+        spatial_subsample=config["spatial_subsample"],
+        data_dir=config["data_dir"],
+        test_split=config["val_ratio"],
     )
-    dataset, train_loader, val_loader, normalizer = data
+    train_loader, val_loader, profile_data = data
 
     # Initialize ODE model, loss function, and optimizer
-    # TODO account for conditioning parameters from data
+    initial_condition, conditioning, target_snapshots = next(iter(train_loader))
+    input_dim = initial_condition.shape[1]
+    output_dim = target_snapshots.shape[2]
+    conditioning_dim = conditioning.shape[1]
     activation_fn = networks.get_activation(config["activation_fn"])
-    input_dim = dataset.shape[1]
     config["input_dim"] = input_dim
-    config["output_dim"] = input_dim
+    config["output_dim"] = output_dim
+    config["conditioning_dim"] = conditioning.shape[1]
 
     ode_func = networks.ODE_FCNN(
         input_dim=input_dim,
-        output_dim=input_dim,
+        conditioning_dim=conditioning_dim,
+        output_dim=output_dim,
         hidden_dim=config["hidden_dim"],
         num_hidden_layers=config["num_hidden_layers"],
         activation_fn=activation_fn,
     )
     model = networks.NeuralODE(ode_func, solver=config["solver"])
 
-    # TODO log activation
-    logger.log_config(config)
+    exp_logger.log_config(config)
 
     loss_fn = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=config["lr"])
@@ -132,26 +143,33 @@ def run_training(config, run_dir):
         optimizer,
         loss_fn,
         config["num_epochs"],
-        logger,
+        exp_logger,
     )
 
 
 def main(train=False):
     config = {
-        "traj_len": 64,
+        # training params
+        "manual_seed": 42,
         "num_epochs": 50,
         "lr": 1e-2,
+        # model params
         "hidden_dim": 128,
         "num_hidden_layers": 4,
-        "batch_size": 32,
         "solver": "rk4",
         "activation_fn": "relu",
-        "manual_seed": 42,
-        "temporal_stride": 10,
+        # data params
+        "data_dir": "data",
+        "batch_size": 32,
+        "exp_nums": None, #[1, 2, 3, 4, 5, 6],  # None,  # if None use all
+        "temporal_subsample": 30,  # temporal subsampling on profile data
+        "spatial_subsample": 4,  # not working correctly for NODE
+        "traj_len": 64,
+        "val_ratio": 0.1,
     }
     torch.manual_seed(config["manual_seed"])
 
-    run_dir = "test"
+    run_dir = "test2"
     if train:
         run_training(config, run_dir)
     visualize.viz_node_results(run_dir)
@@ -160,4 +178,4 @@ def main(train=False):
 if __name__ == "__main__":
     # TODO load config from input + defaults
     # split out train and plotting functions
-    main(train=False)
+    main(train=True)
