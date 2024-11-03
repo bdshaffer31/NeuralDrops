@@ -9,13 +9,18 @@
     "data_dir": "data",
     "batch_size": 32,
     "exp_nums": [
-        1
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
     ],
-    "temporal_subsample": 10,
-    "spatial_subsample": 2,
+    "temporal_subsample": 30,
+    "spatial_subsample": 4,
     "traj_len": 64,
     "val_ratio": 0.1,
-    "input_dim": 640,
-    "output_dim": 640,
+    "input_dim": 320,
+    "output_dim": 320,
     "conditioning_dim": 5
 }
