@@ -1,6 +1,6 @@
 {
     "manual_seed": 42,
-    "num_epochs": 10,
+    "num_epochs": 50,
     "lr": 0.01,
     "hidden_dim": 128,
     "num_hidden_layers": 4,
@@ -8,14 +8,7 @@
     "activation_fn": "relu",
     "data_dir": "data",
     "batch_size": 32,
-    "exp_nums": [
-        1,
-        2,
-        3,
-        4,
-        5,
-        6
-    ],
+    "exp_nums": null,
     "temporal_subsample": 30,
     "spatial_subsample": 4,
     "traj_len": 64,
