@@ -22,6 +22,7 @@ def viz_node_results(run_dir):
         exp_nums=config["exp_nums"],
         temporal_subsample=config["temporal_subsample"],
         spatial_subsample=config["spatial_subsample"],
+        use_log_transform=config["use_log_transform"],
         data_dir=config["data_dir"],
         test_split=config["val_ratio"],
     )
@@ -63,6 +64,8 @@ def viz_node_results(run_dir):
         x_hist = pred_traj.squeeze()
 
     for data_state, pred_state in zip(dataset[::100], x_hist[::100]):
+        data_state = profile_data.log_scaler.inverse_apply(data_state)
+        pred_state = profile_data.log_scaler.inverse_apply(pred_state)
         plt.plot(data_state, c="dimgrey")
         plt.plot(pred_state, c="r")
     plt.ylabel("h")
@@ -117,7 +120,7 @@ def viz_node_results(run_dir):
         fig.colorbar(im2, ax=axs[1], shrink=colobar_scale)
 
         # Plot 3: Squared Difference
-        im3 = axs[2].imshow(np.abs(dataset[1:] - x_hist), aspect="auto", cmap="magma")
+        im3 = axs[2].imshow(np.abs(dataset - x_hist), aspect="auto", cmap="magma")
         axs[2].invert_yaxis()
         axs[2].set_title("Absolute Difference")
         axs[2].set_xticks(x_ticks)
@@ -140,9 +143,11 @@ def viz_node_results(run_dir):
             conditioning = profile_data.get_conditioning(run_name)
             initial_state = dataset[x_init_t].unsqueeze(0)
             pred_traj = model(initial_state, conditioning, t).squeeze()
-        mse_val = torch.mean((dataset[1:] - pred_traj) ** 2)
+        true_profile = profile_data.log_scaler.inverse_apply(dataset[1:])
+        pred_profile = profile_data.log_scaler.inverse_apply(pred_traj)
+        mse_val = torch.mean((true_profile - pred_profile) ** 2)
         error_vals.append(mse_val)
-        plot_error_maps(dataset, pred_traj, title=run_name)
+        plot_error_maps(true_profile, pred_profile, title=run_name)
 
     plt.scatter(range(1, len(error_vals) + 1), error_vals)
     plt.xticks(range(1, len(error_vals) + 1), labels=list(profile_data.data.keys()))
