@@ -10,7 +10,8 @@ class FCNN(nn.Module):
         output_dim,
         hidden_dim=128,
         num_hidden_layers=4,
-        activation_fn=nn.ReLU,
+        activation_fn=nn.ReLU(),
+        output_fn=nn.Identity(),
     ):
         super(FCNN, self).__init__()
         layers = []
@@ -20,6 +21,7 @@ class FCNN(nn.Module):
             layers.append(nn.Linear(hidden_dim, hidden_dim))
             layers.append(activation_fn)
         layers.append(nn.Linear(hidden_dim, output_dim))
+        layers.append(output_fn)
         self.model = nn.Sequential(*layers)
 
     def forward(self, t, x):
@@ -51,6 +53,10 @@ class NeuralODE(nn.Module):
         return odeint(self.ode_func, x0, t, method=self.solver)
 
 
+class Sine(nn.Module):
+    def forward(self, x):
+        return torch.sin(x)
+
 def get_activation(activation_name):
     activations = {
         "relu": nn.ReLU(),
@@ -64,6 +70,7 @@ def get_activation(activation_name):
         "swish": nn.SiLU(),
         "softmax": nn.Softmax(dim=1),
         "identity": nn.Identity(),
+        "sine": Sine(),  # Adding the custom sine activation
     }
     activation = activations.get(activation_name.lower())
     if activation is None:

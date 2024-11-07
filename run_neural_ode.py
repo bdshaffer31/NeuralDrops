@@ -72,6 +72,7 @@ def load_node_model_from_logger(log_loader):
     hidden_dim = config.get("hidden_dim")
     num_hidden_layers = config.get("num_hidden_layers")
     activation_fn = networks.get_activation(config["activation_fn"])
+    output_fn = networks.get_activation(config["output_fn"])
 
     # Load the best model from the logger
     best_model_path = log_loader.get_relpath("best_model.pth")
@@ -83,6 +84,7 @@ def load_node_model_from_logger(log_loader):
         hidden_dim=hidden_dim,
         num_hidden_layers=num_hidden_layers,
         activation_fn=activation_fn,
+        output_fn=output_fn,
     )
     model = networks.NeuralODE(ode_func, solver=config["solver"])
 
@@ -104,6 +106,7 @@ def run_training(config, run_dir):
         exp_nums=config["exp_nums"],
         temporal_subsample=config["temporal_subsample"],
         spatial_subsample=config["spatial_subsample"],
+        use_log_transform=config["use_log_transform"],
         data_dir=config["data_dir"],
         test_split=config["val_ratio"],
     )
@@ -115,6 +118,7 @@ def run_training(config, run_dir):
     output_dim = target_snapshots.shape[2]
     conditioning_dim = conditioning.shape[1]
     activation_fn = networks.get_activation(config["activation_fn"])
+    output_fn = networks.get_activation(config["output_fn"])
     config["input_dim"] = input_dim
     config["output_dim"] = output_dim
     config["conditioning_dim"] = conditioning.shape[1]
@@ -126,6 +130,7 @@ def run_training(config, run_dir):
         hidden_dim=config["hidden_dim"],
         num_hidden_layers=config["num_hidden_layers"],
         activation_fn=activation_fn,
+        output_fn=output_fn,
     )
     model = networks.NeuralODE(ode_func, solver=config["solver"])
 
@@ -151,25 +156,27 @@ def main(train=False):
     config = {
         # training params
         "manual_seed": 42,
-        "num_epochs": 50,
+        "num_epochs": 10,
         "lr": 1e-2,
         # model params
         "hidden_dim": 128,
         "num_hidden_layers": 4,
         "solver": "rk4",
-        "activation_fn": "relu",
+        "activation_fn": "sine", #"relu",
+        "output_fn": "identity",
         # data params
         "data_dir": "data",
         "batch_size": 32,
-        "exp_nums": None, #[1, 2, 3, 4, 5, 6],  # None,  # if None use all
+        "exp_nums": [1, 3], # None,  # if None use all
         "temporal_subsample": 30,  # temporal subsampling on profile data
-        "spatial_subsample": 4,  # not working correctly for NODE
+        "spatial_subsample": 4,
+        "use_log_transform": False,
         "traj_len": 64,
         "val_ratio": 0.1,
     }
     torch.manual_seed(config["manual_seed"])
 
-    run_dir = "test2"
+    run_dir = "test3"
     if train:
         run_training(config, run_dir)
     visualize.viz_node_results(run_dir)

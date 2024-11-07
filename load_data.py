@@ -106,6 +106,36 @@ class Standardizer:
             raise ValueError("Normalization parameters not set. Call 'set_norm' first.")
         return (data * (self.max - self.min)) + self.min
 
+class LogTransform():
+    # TODO log the data and exp the model outputs so we only get positive values
+
+    def __init__(self):
+        self.epsilon = 1e-2
+
+    def __call__(self, x):
+        return self.apply(x)
+    
+    def apply(self, x):
+        # add 1 to stabilize?
+        return torch.log(self.epsilon+x)
+    
+    def inverse_apply(self, x):
+        return torch.exp(x)-self.epsilon
+
+class IdentityTransform():
+
+    def __init__(self):
+        pass
+
+    def __call__(self, x):
+        return x
+    
+    def apply(self, x):
+        return x
+    
+    def inverse_apply(self, x):
+        return x
+
 
 class ProfileDataset(Dataset):
     def __init__(
@@ -115,6 +145,7 @@ class ProfileDataset(Dataset):
         temporal_subsample=1,
         spatial_subsample=1,
         dtype=torch.float32,
+        use_log_transform=True,
     ):
         """
         Args:
@@ -128,6 +159,7 @@ class ProfileDataset(Dataset):
         self.temporal_subsample = temporal_subsample
         self.spatial_subsample = spatial_subsample
         self.dtype = dtype
+        self.use_log_transform = use_log_transform
         self.max_profile_length = (
             7000  # TODO actually determine this from data + some buffer
         )
@@ -162,6 +194,10 @@ class ProfileDataset(Dataset):
             substrates.append(data["substrate"])
 
         self.profile_scaler = Standardizer(torch.cat(profiles, dim=0))
+        if self.use_log_transform:
+            self.log_scaler = LogTransform()
+        else:
+            self.log_scaler = IdentityTransform()
 
         # Fit scalers and encoders
         self.temp_scaler = Standardizer(torch.tensor(temps, dtype=self.dtype))
@@ -187,9 +223,13 @@ class ProfileDataset(Dataset):
                 "reflection_flag": torch.tensor(
                     float(file_data["reflection_flag"]), dtype=self.dtype
                 ),
-                "profile": self.profile_scaler(self.load_profile(file_data)),
+                "profile": self.log_scaler(
+                    self.profile_scaler(self.load_profile(file_data))),
             }
         return data
+
+    def un_norm_data(self, data):
+        return self.profile_scaler.inverse_apply(self.log_scaler.inverse_apply(data))
 
     def load_profile(self, data):
         np_profile = data["profile"]
@@ -341,6 +381,7 @@ def setup_node_data(
     exp_nums=None,
     temporal_subsample=10,
     spatial_subsample=2,
+    use_log_transform=True,
     data_dir="data",
     test_split=0.1,
 ):
@@ -350,6 +391,7 @@ def setup_node_data(
         temporal_subsample=temporal_subsample,
         spatial_subsample=spatial_subsample,
         dtype=torch.float32,
+        use_log_transform=use_log_transform
     )
 
     # Create NODEDataset with the specified trajectory length
