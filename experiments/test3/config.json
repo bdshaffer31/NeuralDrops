@@ -2,17 +2,20 @@
     "manual_seed": 42,
     "num_epochs": 10,
     "lr": 0.01,
-    "hidden_dim": 128,
+    "hidden_dim": 256,
     "num_hidden_layers": 4,
     "solver": "rk4",
-    "activation_fn": "sine",
+    "activation_fn": "relu",
     "output_fn": "identity",
     "data_dir": "data",
+    "data_len": 7000,
     "batch_size": 32,
-    "exp_nums": [
-        1,
-        3
+    "exp_nums": null,
+    "valid_solutes": [
+        "PVA"
     ],
+    "valid_substrates": null,
+    "valid_temps": null,
     "temporal_subsample": 30,
     "spatial_subsample": 4,
     "use_log_transform": false,

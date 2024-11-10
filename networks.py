@@ -57,6 +57,7 @@ class Sine(nn.Module):
     def forward(self, x):
         return torch.sin(x)
 
+
 def get_activation(activation_name):
     activations = {
         "relu": nn.ReLU(),

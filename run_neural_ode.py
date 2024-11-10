@@ -100,10 +100,16 @@ def run_training(config, run_dir):
     exp_logger = logger.ExperimentLogger(run_dir=run_dir, use_timestamp=False)
 
     traj_len = config["traj_len"]
+    # if we just set up a data parameters sub dict we can pass it as *args
+    # and it wouldn't require editing this when we change config setup
     data = load_data.setup_node_data(
         traj_len,
+        data_len=config["data_len"],
         batch_size=config["batch_size"],
         exp_nums=config["exp_nums"],
+        valid_solutes=config["valid_solutes"],
+        valid_substrates=config["valid_substrates"],
+        valid_temps=config["valid_temps"],
         temporal_subsample=config["temporal_subsample"],
         spatial_subsample=config["spatial_subsample"],
         use_log_transform=config["use_log_transform"],
@@ -159,15 +165,19 @@ def main(train=False):
         "num_epochs": 10,
         "lr": 1e-2,
         # model params
-        "hidden_dim": 128,
+        "hidden_dim": 256,
         "num_hidden_layers": 4,
         "solver": "rk4",
-        "activation_fn": "sine", #"relu",
+        "activation_fn": "relu",  # "relu",
         "output_fn": "identity",
         # data params
         "data_dir": "data",
+        "data_len": 7000,
         "batch_size": 32,
-        "exp_nums": [1, 3], # None,  # if None use all
+        "exp_nums": None, #[19, 22, 23, 27],  # if None use all, otherwise give a list of ints
+        "valid_solutes": ["PVA"],  # if None keep all solutes, otherwise give a list of strings
+        "valid_substrates": None,  # if None keep all substrates, otherwise give a list of strings
+        "valid_temps": None,  # if None keep all substrates, otherwise give a list of floats
         "temporal_subsample": 30,  # temporal subsampling on profile data
         "spatial_subsample": 4,
         "use_log_transform": False,
