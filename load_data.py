@@ -106,7 +106,8 @@ class Standardizer:
             raise ValueError("Normalization parameters not set. Call 'set_norm' first.")
         return (data * (self.max - self.min)) + self.min
 
-class LogTransform():
+
+class LogTransform:
     # TODO log the data and exp the model outputs so we only get positive values
 
     def __init__(self):
@@ -114,25 +115,25 @@ class LogTransform():
 
     def __call__(self, x):
         return self.apply(x)
-    
+
     def apply(self, x):
         # add 1 to stabilize?
-        return torch.log(self.epsilon+x)
-    
+        return torch.log(self.epsilon + x)
+
     def inverse_apply(self, x):
-        return torch.exp(x)-self.epsilon
+        return torch.exp(x) - self.epsilon
 
-class IdentityTransform():
 
+class IdentityTransform:
     def __init__(self):
         pass
 
     def __call__(self, x):
         return x
-    
+
     def apply(self, x):
         return x
-    
+
     def inverse_apply(self, x):
         return x
 
@@ -140,8 +141,12 @@ class IdentityTransform():
 class ProfileDataset(Dataset):
     def __init__(
         self,
+        data_len,
         data_dir,
         experiment_numbers=None,
+        valid_solutes=None,
+        valid_substrates=None,
+        valid_temps=None,
         temporal_subsample=1,
         spatial_subsample=1,
         dtype=torch.float32,
@@ -156,23 +161,19 @@ class ProfileDataset(Dataset):
             spatial_subsample (int): Factor to subsample the spatial dimension (x-axis) of each profile.
         """
         self.data_dir = data_dir
+        self.valid_solutes = valid_solutes
+        self.valid_substrates = valid_substrates
+        self.valid_temps = valid_temps
         self.temporal_subsample = temporal_subsample
         self.spatial_subsample = spatial_subsample
         self.dtype = dtype
         self.use_log_transform = use_log_transform
         self.max_profile_length = (
-            7000  # TODO actually determine this from data + some buffer
+            data_len  # TODO actually determine this from data + some buffer
         )
 
         # List of files to load
-        if experiment_numbers is not None:
-            self.files = [f"Exp_{num}.mat" for num in experiment_numbers]
-        else:
-            self.files = [
-                filename
-                for filename in os.listdir(data_dir)
-                if filename.startswith("Exp_") and filename.endswith(".mat")
-            ]
+        self.setup_files(experiment_numbers, data_dir)
 
         # setup data scalers and encoders
         self.setup_scalers()
@@ -181,11 +182,39 @@ class ProfileDataset(Dataset):
         self.data = self._load_and_normalize_parameters()
         # returns a dictionary of
         # {'filename': {'temp': val, ... 'profile': tensor}}
+    
+    def setup_files(self, experiment_numbers, data_dir):
+        if experiment_numbers is not None:
+            self.files = [f"Exp_{num}.mat" for num in experiment_numbers]
+        else:
+            self.files = [
+                filename
+                for filename in os.listdir(data_dir)
+                if filename.startswith("Exp_") and filename.endswith(".mat")
+            ]
+        valid_files = []
+        for file in self.files:
+            data = self._load_data(file)
+            if self.check_valid_dataset(data):
+                valid_files.append(file)
+        self.valid_files = valid_files
+
+    def check_valid_dataset(self, data):
+        temp_valid = (
+            float(data["temp"]) in self.valid_temps if self.valid_temps is not None else True
+        )
+        solute_valid = (
+            data["solute"] in self.valid_solutes if self.valid_solutes is not None else True
+        )
+        substrate_valid = (
+            data["substrate"] in self.valid_substrates if self.valid_substrates is not None else True
+        )
+        return temp_valid and solute_valid and substrate_valid
 
     def setup_scalers(self):
         # Collect parameters to fit scalers and encoders
         profiles, temps, wt_pers, solutes, substrates = [], [], [], [], []
-        for file in self.files:
+        for file in self.valid_files:
             data = self._load_data(file)
             profiles.append(self.load_profile(data))
             temps.append(float(data["temp"]))
@@ -209,7 +238,7 @@ class ProfileDataset(Dataset):
 
     def _load_and_normalize_parameters(self):
         data = {}
-        for file in self.files:
+        for file in self.valid_files:
             file_data = self._load_data(file)
             data[file] = {
                 "temp": self.temp_scaler(
@@ -224,7 +253,8 @@ class ProfileDataset(Dataset):
                     float(file_data["reflection_flag"]), dtype=self.dtype
                 ),
                 "profile": self.log_scaler(
-                    self.profile_scaler(self.load_profile(file_data))),
+                    self.profile_scaler(self.load_profile(file_data))
+                ),
             }
         return data
 
@@ -256,6 +286,7 @@ class ProfileDataset(Dataset):
         }
         return contents_dict
 
+    # TODO add an option for sine encoding
     def get_conditioning(self, file):
         conditioning = torch.tensor(
             [
@@ -272,7 +303,7 @@ class ProfileDataset(Dataset):
     def get_input_array(self, file, t):
         # Get profile and conditioning variables as concatenated input array, applying subsampling
         profile = self.data[file]["profile"][t]
-        conditioning = self.get_conditioning(file)
+        conditioning = self.get_conditioning(file, t)
         return torch.cat([profile, conditioning])
 
     # needed to work as pytorch dataset, maybe not what this should do though
@@ -377,8 +408,12 @@ class NeuralFieldDataset(Dataset):
 
 def setup_node_data(
     traj_len,
-    batch_size,
+    data_len=7_000,
+    batch_size=32,
     exp_nums=None,
+    valid_solutes=None,
+    valid_substrates=None,
+    valid_temps=None,
     temporal_subsample=10,
     spatial_subsample=2,
     use_log_transform=True,
@@ -386,12 +421,16 @@ def setup_node_data(
     test_split=0.1,
 ):
     profile_data = ProfileDataset(
+        data_len=data_len,
         data_dir=data_dir,
         experiment_numbers=exp_nums,
+        valid_solutes=valid_solutes,
+        valid_substrates=valid_substrates,
+        valid_temps=valid_temps,
         temporal_subsample=temporal_subsample,
         spatial_subsample=spatial_subsample,
         dtype=torch.float32,
-        use_log_transform=use_log_transform
+        use_log_transform=use_log_transform,
     )
 
     # Create NODEDataset with the specified trajectory length

@@ -18,8 +18,12 @@ def viz_node_results(run_dir):
     traj_len = config["traj_len"]
     data = load_data.setup_node_data(
         traj_len,
+        data_len=config["data_len"],
         batch_size=config["batch_size"],
         exp_nums=config["exp_nums"],
+        valid_solutes=config["valid_solutes"],
+        valid_substrates=config["valid_substrates"],
+        valid_temps=config["valid_temps"],
         temporal_subsample=config["temporal_subsample"],
         spatial_subsample=config["spatial_subsample"],
         use_log_transform=config["use_log_transform"],
@@ -27,8 +31,9 @@ def viz_node_results(run_dir):
         test_split=config["val_ratio"],
     )
 
-    viz_file = "Exp_1.mat"
     train_loader, val_loader, profile_data = data
+    viz_file = profile_data.valid_files[0] #"Exp_1.mat"
+    print(viz_file)
     dataset = profile_data.data[viz_file]["profile"]
     conditioning = profile_data.get_conditioning(viz_file)
 
