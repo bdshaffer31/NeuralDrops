@@ -1,3 +1,4 @@
+
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter
@@ -12,7 +13,7 @@ def setup_parabolic_initial_h_profile(r, h0, r_c, drop_fraction=1.0, order=2):
 
 def setup_cap_initial_h_profile(r, h0, r_c, drop_fraction=1.0):
     R = (r_c**2 + h0**2) / (2*h0)
-    theta = np.arccos(1-h0*R)
+    theta = np.arccos(1-h0/R)
     
     # Calculate the contact angle in radians and convert to degrees
     contact_angle_rad = np.arcsin(r_c / R)
@@ -23,7 +24,7 @@ def setup_cap_initial_h_profile(r, h0, r_c, drop_fraction=1.0):
     h_unnorm = h_unnorm - np.min(h_unnorm)
     h_norm = h_unnorm / np.max(h_unnorm)
     h = h0 * h_norm
-    
+
     return h, contact_angle_deg
 
 def as_grad(x, dx):
@@ -80,6 +81,14 @@ def h_mask_grid(grid_data, h, z):
             if z_val > h_r:
                 masked_grid[i, j] = 0
     return masked_grid
+
+def evap_velocity (D, M, A, B, C, T):
+    R = 8.314 # [J/(mol*K)]
+    p_sat = 10**(A-B/(C+T-273.15)) #Antoine's Equation
+    m_dot = -D*M*p_sat/(R*T)
+    dh_dr = as_grad(h,dr)
+    w_e = -m_dot/rho* np.sqrt(1 + dh_dr^2)
+    return w_e
 
 def update_height(h, r, sigma, d_sigma_dr, eta, rho, w_e, dr, dz, dt):
     """Update the height profile based on the radial velocity and evaporation rate."""
@@ -286,8 +295,8 @@ if __name__ == "__main__":
 
     # initialize height profile
     # recomend using 4th order for testing (since it is further from steady state)
-    # h, theta = setup_cap_initial_h_profile(r, hmax0, r_c, drop_fraction=1.0)
-    h = setup_parabolic_initial_h_profile(r, hmax0, r_c, drop_fraction=1.0, order=4)
+    h, theta = setup_cap_initial_h_profile(r, hmax0, r_c, drop_fraction=1.0)
+    # h = setup_parabolic_initial_h_profile(r, hmax0, r_c, drop_fraction=1.0, order=4)
     # h = hmax0 - (hmax0/r_c) * r
     
     # plotting_eval()
