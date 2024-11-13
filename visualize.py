@@ -32,7 +32,7 @@ def viz_node_results(run_dir):
     )
 
     train_loader, val_loader, profile_data = data
-    viz_file = profile_data.valid_files[0] #"Exp_1.mat"
+    viz_file = profile_data.valid_files[0]  # "Exp_1.mat"
     print(viz_file)
     dataset = profile_data.data[viz_file]["profile"]
     conditioning = profile_data.get_conditioning(viz_file)
