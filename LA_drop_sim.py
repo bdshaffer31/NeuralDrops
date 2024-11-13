@@ -3,7 +3,7 @@ from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
 from dataclasses import dataclass
 
-# from scipy.ndimage import gaussian_filter
+from scipy.ndimage import gaussian_filter
 
 
 @dataclass
@@ -109,11 +109,6 @@ def compute_u_velocity(params, r, z, field_vars, h):
             u_grid[i, j] = np.trapz(integrand[: j + 1], dx=params.dz)
     u_grid = interp_h_mask_grid(u_grid, h, z)
 
-    # TODO this is a huge issue, maybe solved by interpolating
-    # intead of jsut grabbing binary boundary cells
-    # could also be solved by tracking the boundary and moving the discretization
-    # u_grid = gaussian_filter(u_grid, sigma=1)
-
     return u_grid
 
 
@@ -166,6 +161,7 @@ def calculate_dh_dt(t, params, r, z, field_vars, h):
 
     # Integrate r * u over z from 0 to h for each radial position
     integral_u_r = np.trapz(r[:, None] * u_grid, dx=params.dz, axis=1)
+    integral_u_r *= params.dz
     grad_u_r = as_grad(integral_u_r, params.dr)
 
     # Calculate dh/dt as radial term plus evaporation rate
@@ -173,7 +169,13 @@ def calculate_dh_dt(t, params, r, z, field_vars, h):
     radial_term[0] = radial_term[3]
     radial_term[1] = radial_term[3]
     radial_term[2] = radial_term[3]
+    # TODO
     dh_dt = radial_term + params.w_e
+    # dh_dt = -1 * radial_term + params.w_e
+
+    # TODO
+    # added for debug
+    dh_dt = gaussian_filter(dh_dt, sigma=10)
 
     return dh_dt
 
@@ -183,6 +185,7 @@ def run_forward_euler_simulation(params, r, z, field_vars, h0):
     h = h0.copy()
 
     for t in range(params.Nt):
+        print(t, end="\r")
         dh_dt = calculate_dh_dt(t * params.dt, params, r, z, field_vars, h)
         h = h + params.dt * dh_dt  # Forward Euler step
         h = np.maximum(h, 0)  # Ensure non-negative height
@@ -213,9 +216,10 @@ def run_BDF_simulation(params, r, z, field_vars, h0):
 def plot_height_profile_evolution(r, h_profiles):
     """Plot the evolution of the height profile over time."""
     plt.figure(figsize=(10, 6))
-    for i, h_t in enumerate(h_profiles):
+    for i, h_t in enumerate(h_profiles[::50]):
         plt.plot(r * 1e3, h_t * 1e6, c="dimgrey")
-    plt.plot(r * 1e3, h_profiles[-1] * 1e6, c="r", label="final")
+    plt.plot(r * 1e3, h_profiles[0] * 1e6, c="k", label="h0")
+    plt.plot(r * 1e3, h_profiles[-1] * 1e6, c="r", label="Final")
     plt.xlabel("Radius (mm)")
     plt.ylabel("Height (µm)")
     plt.legend()
@@ -287,6 +291,7 @@ def inspect(params, r, z, field_vars, h):
     plt.legend()
     plt.show()
 
+
 def plot_velocity(params, r, z, field_vars, h):
     field_vars.u_grid = compute_u_velocity(params, r, z, field_vars, h)
     field_vars.w_grid = compute_w_velocity(params, r, z, field_vars, h)
@@ -332,19 +337,19 @@ def plot_velocity(params, r, z, field_vars, h):
 def run():
     # Define the simulation parameters
     params = SimulationParams(
-        r_c=1e-3,          # Radius of the droplet in meters
-        hmax0=5e-4,        # Initial droplet height at the center in meters
-        Nr=200,            # Number of radial points
-        Nz=110,            # Number of z-axis points
-        Nt=2,              # Number of time steps
-        dr=1e-3 / 200,     # Radial grid spacing
-        dz=5e-4 / 110,     # Vertical grid spacing
-        dt=1e-5,           # Time step size eg 1e-5
-        rho=1,             # Density of the liquid (kg/m^3) eg 1
-        w_e=-0.0,          # Constant evaporation rate (m/s) eg 1e-4
-        sigma=0.072,       # Surface tension (N/m) eg 0.072
-        eta=1e-3,          # Viscosity (Pa*s) eg 1e-3
-        d_sigma_dr=0.0,    # Surface tension gradient
+        r_c=1e-3,  # Radius of the droplet in meters
+        hmax0=5e-4,  # Initial droplet height at the center in meters
+        Nr=100,  # Number of radial points
+        Nz=110,  # Number of z-axis points
+        Nt=1000,  # Number of time steps
+        dr=1e-3 / 200,  # Radial grid spacing
+        dz=5e-4 / 110,  # Vertical grid spacing
+        dt=5e-5,  # Time step size eg 1e-5
+        rho=1,  # Density of the liquid (kg/m^3) eg 1
+        w_e=-1e-3,  # Constant evaporation rate (m/s) eg 1e-4
+        sigma=0.072,  # Surface tension (N/m) eg 0.072
+        eta=1e-3,  # Viscosity (Pa*s) eg 1e-3
+        d_sigma_dr=-1e-2,  # Surface tension gradient
     )
 
     # Initialize the grids and field variables
@@ -354,6 +359,9 @@ def run():
     )
 
     eval(params, r, z, field_vars, h)
+    h = setup_parabolic_initial_h_profile(
+        r, params.hmax0, params.r_c, drop_fraction=1.0, order=4
+    )
     inspect(params, r, z, field_vars, h)
     plot_velocity(params, r, z, field_vars, h)
 

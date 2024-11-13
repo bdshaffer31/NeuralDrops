@@ -168,14 +168,16 @@ def main(train=False):
         "hidden_dim": 256,
         "num_hidden_layers": 4,
         "solver": "rk4",
-        "activation_fn": "relu",  # "relu",
+        "activation_fn": "relu",
         "output_fn": "identity",
         # data params
         "data_dir": "data",
         "data_len": 7000,
         "batch_size": 32,
-        "exp_nums": None, #[19, 22, 23, 27],  # if None use all, otherwise give a list of ints
-        "valid_solutes": ["PVA"],  # if None keep all solutes, otherwise give a list of strings
+        "exp_nums": None,  # [19, 22, 23, 27],  # if None use all, otherwise give a list of ints
+        "valid_solutes": [
+            "PVA"
+        ],  # if None keep all solutes, otherwise give a list of strings
         "valid_substrates": None,  # if None keep all substrates, otherwise give a list of strings
         "valid_temps": None,  # if None keep all substrates, otherwise give a list of floats
         "temporal_subsample": 30,  # temporal subsampling on profile data
