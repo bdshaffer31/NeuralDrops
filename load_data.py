@@ -267,14 +267,28 @@ class ProfileDataset(Dataset):
     def un_norm_data(self, data):
         return self.profile_scaler.inverse_apply(self.log_scaler.inverse_apply(data))
 
+    # def load_profile(self, data):
+    #     np_profile = data["profile"]
+    #     np_profile = np.array(np_profile, dtype="float32")
+    #     profile = torch.tensor(np_profile, dtype=self.dtype)
+    #     # apply detrending, centering, padding here
+    #     profile, _ = utils.detrend_dataset(profile, last_n=50, window_size=50)
+    #     profile = utils.center_data(profile)
+    #     # profile = utils.pad_profile_to_length(profile, 8000)
+
+    #     profile = profile[:: self.temporal_subsample, :: self.spatial_subsample]
+    #     return profile
+    
     def load_profile(self, data):
         np_profile = data["profile"]
         np_profile = np.array(np_profile, dtype="float32")
-        profile = torch.tensor(np_profile, dtype=self.dtype)
+        profile = torch.tensor(np_profile, dtype=torch.float32)
         # apply detrending, centering, padding here
         profile, _ = utils.detrend_dataset(profile, last_n=50, window_size=50)
         profile = utils.center_data(profile)
-        profile = utils.pad_profile_to_length(profile, 8000)
+        profile = utils.pad_profile(profile, 64*self.temporal_subsample)
+        profile = utils.smooth_profile(profile)
+        profile = utils.vertical_crop_profile(profile, 0.78)
 
         profile = profile[:: self.temporal_subsample, :: self.spatial_subsample]
         return profile
@@ -290,6 +304,8 @@ class ProfileDataset(Dataset):
             "reflection_flag": real_contents[4][0][0],
             "profile": real_contents[5][0].T,
         }
+        if len(contents_dict["profile"].shape) < 2:
+            contents_dict["profile"] = real_contents[7][0].T
         return contents_dict
 
     # TODO add an option for sine encoding
