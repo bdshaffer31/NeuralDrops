@@ -166,27 +166,27 @@ def main(train=False):
         "lr": 1e-2,
         # model params
         "hidden_dim": 256,
-        "num_hidden_layers": 4,
+        "num_hidden_layers": 6,
         "solver": "rk4",
-        "activation_fn": "relu",  # "relu",
+        "activation_fn": "relu",
         "output_fn": "identity",
         # data params
         "data_dir": "data",
         "data_len": 7000,
         "batch_size": 32,
-        "exp_nums": [25,26,27,28,29,30], #None,  # if None use all, otherwise give a list of ints
-        "valid_solutes": ["PVA"],  # if None keep all solutes, otherwise give a list of strings
+        "exp_nums": [10,15,18,9,6,8,48,47], #None,  # [19, 22, 23, 27],  # if None use all, otherwise give a list of ints
+        "valid_solutes": None, # if None keep all solutes, otherwise give a list of strings
         "valid_substrates": None,  # if None keep all substrates, otherwise give a list of strings
         "valid_temps": None,  # if None keep all substrates, otherwise give a list of floats
-        "temporal_subsample": 30,  # temporal subsampling on profile data
-        "spatial_subsample": 4,
+        "temporal_subsample": 15,  # temporal subsampling on profile data
+        "spatial_subsample": 5,
         "use_log_transform": False,
         "traj_len": 64,
         "val_ratio": 0.1,
     }
     torch.manual_seed(config["manual_seed"])
 
-    run_dir = "test3"
+    run_dir = "test_different_length"
     if train:
         run_training(config, run_dir)
     visualize.viz_node_results(run_dir)

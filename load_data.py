@@ -182,7 +182,7 @@ class ProfileDataset(Dataset):
         self.data = self._load_and_normalize_parameters()
         # returns a dictionary of
         # {'filename': {'temp': val, ... 'profile': tensor}}
-    
+
     def setup_files(self, experiment_numbers, data_dir):
         if experiment_numbers is not None:
             self.files = [f"Exp_{num}.mat" for num in experiment_numbers]
@@ -201,13 +201,19 @@ class ProfileDataset(Dataset):
 
     def check_valid_dataset(self, data):
         temp_valid = (
-            float(data["temp"]) in self.valid_temps if self.valid_temps is not None else True
+            float(data["temp"]) in self.valid_temps
+            if self.valid_temps is not None
+            else True
         )
         solute_valid = (
-            data["solute"] in self.valid_solutes if self.valid_solutes is not None else True
+            data["solute"] in self.valid_solutes
+            if self.valid_solutes is not None
+            else True
         )
         substrate_valid = (
-            data["substrate"] in self.valid_substrates if self.valid_substrates is not None else True
+            data["substrate"] in self.valid_substrates
+            if self.valid_substrates is not None
+            else True
         )
         return temp_valid and solute_valid and substrate_valid
 
@@ -261,14 +267,28 @@ class ProfileDataset(Dataset):
     def un_norm_data(self, data):
         return self.profile_scaler.inverse_apply(self.log_scaler.inverse_apply(data))
 
+    # def load_profile(self, data):
+    #     np_profile = data["profile"]
+    #     np_profile = np.array(np_profile, dtype="float32")
+    #     profile = torch.tensor(np_profile, dtype=self.dtype)
+    #     # apply detrending, centering, padding here
+    #     profile, _ = utils.detrend_dataset(profile, last_n=50, window_size=50)
+    #     profile = utils.center_data(profile)
+    #     # profile = utils.pad_profile_to_length(profile, 8000)
+
+    #     profile = profile[:: self.temporal_subsample, :: self.spatial_subsample]
+    #     return profile
+    
     def load_profile(self, data):
         np_profile = data["profile"]
         np_profile = np.array(np_profile, dtype="float32")
-        profile = torch.tensor(np_profile, dtype=self.dtype)
+        profile = torch.tensor(np_profile, dtype=torch.float32)
         # apply detrending, centering, padding here
         profile, _ = utils.detrend_dataset(profile, last_n=50, window_size=50)
         profile = utils.center_data(profile)
-        profile = utils.pad_profile_to_length(profile, 8000)
+        profile = utils.pad_profile(profile, 64*self.temporal_subsample)
+        profile = utils.smooth_profile(profile)
+        profile = utils.vertical_crop_profile(profile, 0.78)
 
         profile = profile[:: self.temporal_subsample, :: self.spatial_subsample]
         return profile
@@ -284,6 +304,8 @@ class ProfileDataset(Dataset):
             "reflection_flag": real_contents[4][0][0],
             "profile": real_contents[5][0].T,
         }
+        if len(contents_dict["profile"].shape) < 2:
+            contents_dict["profile"] = real_contents[7][0].T
         return contents_dict
 
     # TODO add an option for sine encoding
@@ -447,3 +469,55 @@ def setup_node_data(
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
     return train_loader, val_loader, profile_data
+
+
+if __name__ == "__main__":
+    import matplotlib.pyplot as plt
+
+    def plot_profile(h_x_t):
+        for i in range(10):
+            i = i * len(h_x_t) // 10
+            plt.plot(h_x_t[i], c="dimgrey")
+        plt.plot(h_x_t[-1], c="r")
+        plt.show()
+
+    data_dir = "data"
+    file = "Exp_1.mat"
+    contents = loadmat(os.path.join(data_dir, file))
+    real_contents = contents["answer"]
+    data = {
+        "solute": real_contents[0][0][0],
+        "wt_per": real_contents[1][0][0],
+        "temp": real_contents[2][0][0],
+        "substrate": real_contents[3][0][0],
+        "reflection_flag": real_contents[4][0][0],
+        "profile": real_contents[5][0].T,
+    }
+    np_profile = data["profile"]
+    np_profile = np.array(np_profile, dtype="float32")
+    profile = torch.tensor(np_profile, dtype=torch.float32)
+    # apply detrending, centering, padding here
+    profile, _ = utils.detrend_dataset(profile, last_n=50, window_size=50)
+    profile = utils.center_data(profile)
+    profile = utils.pad_profile_to_length(profile, 8000)
+
+    profile = profile[::1, ::1]
+    profile = profile - torch.min(profile)
+    profile = profile / torch.max(profile)
+
+    print(profile.shape)
+    # plot_profile(profile)
+
+    def id_drop_boundaries(h, threshold=1.0):
+        # this might not be the way to do it
+        threshold = torch.mean(h[:100]) * 2.0
+        bool_mask = h >= threshold
+        idxs = bool_mask.nonzero()
+        return idxs[0][0], idxs[-1][0]
+
+    print(id_drop_boundaries(profile[0]))
+    boundaries = id_drop_boundaries(profile[0])
+    print(np.array(boundaries))
+    plt.plot(profile[0], c="dimgrey")
+    plt.scatter(np.array(boundaries), [0, 0], c="r")
+    plt.show()
