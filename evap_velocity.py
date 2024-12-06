@@ -62,7 +62,7 @@ def setup_grids(params: SimulationParams):
         rho_grid=params.rho * np.ones((params.Nr, params.Nz)),  # density
         diff_grid=params.rho * np.ones((params.Nr, params.Nz)),  # diffusivity
 
-        m_dot_grid=np.zeros((params.Nr)),  # pressure
+        m_dot_grid=np.zeros((params.Nr)),  # mass loss
     )
 
     return r, z, field_vars
