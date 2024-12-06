@@ -174,7 +174,7 @@ def main(train=False):
         "data_dir": "data",
         "data_len": 7000,
         "batch_size": 32,
-        "exp_nums": None, #[19, 22, 23, 27],  # if None use all, otherwise give a list of ints
+        "exp_nums": [25,26,27,28,29,30], #None,  # if None use all, otherwise give a list of ints
         "valid_solutes": ["PVA"],  # if None keep all solutes, otherwise give a list of strings
         "valid_substrates": None,  # if None keep all substrates, otherwise give a list of strings
         "valid_temps": None,  # if None keep all substrates, otherwise give a list of floats
