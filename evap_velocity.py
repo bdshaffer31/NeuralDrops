@@ -1,9 +1,9 @@
 import numpy as np
-from dataclasses import dataclass
-
-import scipy.integrate as integrate
-
+import jax.numpy as jnp
 from jax import vmap
+import matplotlib.pyplot as plt
+from dataclasses import dataclass
+import scipy.integrate as integrate
 
 @dataclass
 class FieldVariables:
@@ -14,6 +14,8 @@ class FieldVariables:
     sigma_grid: np.ndarray  # Surface tension grid
     rho_grid: np.ndarray  # Density grid
     diff_grid: np.ndarray  # Diffusivity grid
+
+    m_dot_grid: np.ndarray  # Diffusivity grid
 
 
 @dataclass
@@ -59,6 +61,8 @@ def setup_grids(params: SimulationParams):
         sigma_grid=params.sigma * np.ones((params.Nr)),  # constant surface tension
         rho_grid=params.rho * np.ones((params.Nr, params.Nz)),  # density
         diff_grid=params.rho * np.ones((params.Nr, params.Nz)),  # diffusivity
+
+        m_dot_grid=np.zeros((params.Nr)),  # pressure
     )
 
     return r, z, field_vars
@@ -81,28 +85,32 @@ def mass_loss (r,theta):
     b_c = 1.0 #TODO
     J_delta = 0 #Contribution from nonhomogenous surface concentration (multi-phase drops)
 
-    cosh_alpha = r**2 + R_c*np.sqrt(np.square(R_c)-np.square(r)*np.square(np.sin(theta)))/(np.square(R_c)+np.square(r))
+    cosh_alpha = (r**2*np.cos(theta) + R_c*np.sqrt(np.square(R_c)-np.square(r)*np.square(np.sin(theta))))/(np.square(R_c)-np.square(r))
 
-    def integral(cosh_alpha):
-        alpha = np.arccosh(cosh_alpha)
-        integral = integrate.quad(lambda x:np.tanh(np.pi*x/(2*np.pi*theta))/np.cosh(np.pi*x/(2*np.pi*theta))/np.sqrt(np.cosh(x)-cosh_alpha) , alpha , np.inf)
-        return integral
+    #def integral(cosh_alpha):
+        #alpha = jnp.arccosh(cosh_alpha)
+        #integral = integrate.quad(lambda x:np.tanh(np.pi*x/(2*np.pi*theta))/np.cosh(np.pi*x/(2*np.pi*theta))/np.sqrt(np.cosh(x)-cosh_alpha) , alpha , np.inf)
+        #return integral
+    integral = np.zeros_like(field_vars.m_dot_grid)
+    for i in range(len(r)):
+        integral[i] , err = integrate.quad(lambda x:
+                                           np.tanh(np.pi*x/(2.0*np.pi-2.0*theta))/
+                                           (np.cosh(np.pi*x/(2.0*np.pi-2.0*theta))*np.sqrt(np.cosh(x)-cosh_alpha[i]))
+                                           , np.arccosh(cosh_alpha[i]) , np.inf)
 
-    integral_array = vmap(integral)(cosh_alpha)
-
-    J_c = np.pi*np.power(np.sqrt(2*(cosh_alpha+np.cos(theta))),3)*integral_array/(2*np.sqrt(2)*np.square(np.pi-theta))
+    #integral_array = vmap(integral)(cosh_alpha)
+    N_prime_alpha = np.power(np.sqrt(2*(cosh_alpha+np.cos(theta))),3)
+    J_c = np.pi*N_prime_alpha*integral/(2*np.sqrt(2)*np.square(np.pi-theta))
 
     J_term = (b_c - params.RH)*J_c + J_delta
 
-    m_dot = -params.D*params.Mw*p_sat/(params.Rs*params.T*r[-1])*J_term
+    m_dot = params.D*params.Mw*p_sat/(params.Rs*params.T*R_c)*J_term
     return m_dot
 
-def evap_velocity (D, M, A, B, C, T):
-    R = 8.314 # [J/(mol*K)]
-    p_sat = 10**(A-B/(C+T-273.15)) #Antoine's Equation
-    m_dot = -D*M*p_sat/(R*T)
-    dh_dr = as_grad(h,dr)
-    w_e = -m_dot/rho* np.sqrt(1 + dh_dr^2)
+
+def evap_velocity (m_dot,h):
+    dh_dr = as_grad(h,params.dr)
+    w_e = -m_dot/params.rho* np.sqrt(1 + np.square(dh_dr))
     return w_e
 
 # Define the simulation parameters
@@ -120,10 +128,29 @@ params = SimulationParams(
     sigma=0.072,       # Surface tension (N/m) eg 0.072
     eta=1e-3,          # Viscosity (Pa*s) eg 1e-3
     d_sigma_dr=0.0,    # Surface tension gradient
+
+    A = 8.07131,
+    B = 1730.63,
+    C = 233.4,
+    D = 2.42e-5,
+    Mw = 0.018,
+    Rs = 496.5,
+    T = 293.15,
+    RH = 0.20,
 )
 
 # Initialize the grids and field variables
 r, z, field_vars = setup_grids(params)
-h = setup_cap_initial_h_profile(
-    r, params.hmax0, params.r_c, drop_fraction=1.0, order=4
-)
+h = setup_cap_initial_h_profile(r, params.hmax0, params.r_c)
+
+m_dot = mass_loss(r,20/180*np.pi)
+
+m_dot = mass_loss(r,20.0*np.pi/180.0)
+print(m_dot)
+plt.plot(r,m_dot)
+plt.show()
+
+w_e = evap_velocity(m_dot,h)
+
+plt.plot(r,w_e)
+plt.show()
