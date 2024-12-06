@@ -32,7 +32,7 @@ def viz_node_results(run_dir):
     )
 
     train_loader, val_loader, profile_data = data
-    viz_file = profile_data.valid_files[0] #"Exp_1.mat"
+    viz_file = profile_data.valid_files[0]  # "Exp_1.mat"
     print(viz_file)
     dataset = profile_data.data[viz_file]["profile"]
     conditioning = profile_data.get_conditioning(viz_file)
@@ -144,12 +144,18 @@ def viz_node_results(run_dir):
     error_vals = []
     for run_name in profile_data.data:
         dataset = profile_data.data[run_name]["profile"]
+        t = torch.linspace(
+            0,
+            (len(dataset) - x_init_t) // traj_len,
+            steps=len(dataset) - x_init_t,
+        )
         with torch.no_grad():
             conditioning = profile_data.get_conditioning(run_name)
             initial_state = dataset[x_init_t].unsqueeze(0)
             pred_traj = model(initial_state, conditioning, t).squeeze()
         true_profile = profile_data.log_scaler.inverse_apply(dataset[1:])
         pred_profile = profile_data.log_scaler.inverse_apply(pred_traj)
+        print(true_profile.shape, pred_profile.shape)
         mse_val = torch.mean((true_profile - pred_profile) ** 2)
         error_vals.append(mse_val)
         plot_error_maps(true_profile, pred_profile, title=run_name)
