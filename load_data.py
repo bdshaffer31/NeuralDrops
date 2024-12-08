@@ -141,7 +141,6 @@ class IdentityTransform:
 class ProfileDataset(Dataset):
     def __init__(
         self,
-        data_len,
         data_dir,
         experiment_numbers=None,
         valid_solutes=None,
@@ -151,6 +150,7 @@ class ProfileDataset(Dataset):
         spatial_subsample=1,
         dtype=torch.float32,
         use_log_transform=True,
+        framerate=1 / 20,
     ):
         """
         Args:
@@ -168,9 +168,7 @@ class ProfileDataset(Dataset):
         self.spatial_subsample = spatial_subsample
         self.dtype = dtype
         self.use_log_transform = use_log_transform
-        self.max_profile_length = (
-            data_len  # TODO actually determine this from data + some buffer
-        )
+        self.framerate = framerate
 
         # List of files to load
         self.setup_files(experiment_numbers, data_dir)
@@ -219,20 +217,24 @@ class ProfileDataset(Dataset):
 
     def setup_scalers(self):
         # Collect parameters to fit scalers and encoders
-        profiles, temps, wt_pers, solutes, substrates = [], [], [], [], []
+        profiles, temps, wt_pers, solutes, substrates, times = [], [], [], [], [], []
         for file in self.valid_files:
             data = self._load_data(file)
-            profiles.append(self.load_profile(data))
+            profile_data = self.load_profile(data)
+            profiles.append(profile_data)
             temps.append(float(data["temp"]))
             wt_pers.append(float(data["wt_per"]))
             solutes.append(data["solute"])
             substrates.append(data["substrate"])
+            times.append(self.setup_t_lin(len(profile_data)))
 
         self.profile_scaler = Standardizer(torch.cat(profiles, dim=0))
         if self.use_log_transform:
             self.log_scaler = LogTransform()
         else:
             self.log_scaler = IdentityTransform()
+
+        self.time_scaler = Standardizer(torch.cat(times))
 
         # Fit scalers and encoders
         self.temp_scaler = Standardizer(torch.tensor(temps, dtype=self.dtype))
@@ -262,33 +264,30 @@ class ProfileDataset(Dataset):
                     self.profile_scaler(self.load_profile(file_data))
                 ),
             }
+            n_samples = len(data[file]["profile"])
+            t_lin = self.setup_t_lin(n_samples)
+            data[file]["t"] = self.time_scaler(t_lin)  # setup t lin
+            data[file]["n_samples"] = len(data[file]["profile"])
         return data
 
     def un_norm_data(self, data):
         return self.profile_scaler.inverse_apply(self.log_scaler.inverse_apply(data))
 
-    # def load_profile(self, data):
-    #     np_profile = data["profile"]
-    #     np_profile = np.array(np_profile, dtype="float32")
-    #     profile = torch.tensor(np_profile, dtype=self.dtype)
-    #     # apply detrending, centering, padding here
-    #     profile, _ = utils.detrend_dataset(profile, last_n=50, window_size=50)
-    #     profile = utils.center_data(profile)
-    #     # profile = utils.pad_profile_to_length(profile, 8000)
+    def setup_t_lin(self, n_samples):
+        return torch.linspace(0, n_samples * (self.framerate), n_samples)
 
-    #     profile = profile[:: self.temporal_subsample, :: self.spatial_subsample]
-    #     return profile
-    
     def load_profile(self, data):
+        # put all preprocessing to load profile data here
+        # leaving as individual
         np_profile = data["profile"]
         np_profile = np.array(np_profile, dtype="float32")
         profile = torch.tensor(np_profile, dtype=torch.float32)
         # apply detrending, centering, padding here
         profile, _ = utils.detrend_dataset(profile, last_n=50, window_size=50)
-        profile = utils.center_data(profile)
-        profile = utils.pad_profile(profile, 64*self.temporal_subsample)
+        profile = utils.pad_profile(profile, 64 * self.temporal_subsample)
         profile = utils.smooth_profile(profile)
         profile = utils.vertical_crop_profile(profile, 0.78)
+        profile = utils.center_data(profile)
 
         profile = profile[:: self.temporal_subsample, :: self.spatial_subsample]
         return profile
@@ -361,6 +360,11 @@ class NODEDataset(Dataset):
                 samples.append((initial_condition, conditioning, target_snapshots))
         return samples
 
+    def get_time_steps(self):
+        return self.profile_data.time_scaler(
+            self.profile_data.setup_t_lin(self.traj_len)
+        )
+
     def __len__(self):
         return len(self.samples)
 
@@ -428,9 +432,70 @@ class NeuralFieldDataset(Dataset):
         return self.samples[idx]
 
 
+class FNODataset(Dataset):
+    def __init__(self, profile_data, num_time_points=10):
+        self.profile_data = profile_data
+        self.num_time_points = num_time_points
+        self.samples = self._prepare_samples()
+
+    def _prepare_samples(self):
+        samples = []
+        for file, data in self.profile_data.data.items():
+            profile = data["profile"]
+            time_steps = data["t"]
+            conditioning = self.profile_data.get_conditioning(file)
+
+            # Create samples for each time step
+            for t_idx in range(1, len(time_steps)):
+                h_0 = profile[0]  # Initial condition
+                h_t = profile[t_idx]  # Profile at time t
+                t = time_steps[t_idx].unsqueeze(-1)  # Time
+                samples.append((h_0, conditioning, t, h_t))
+        return samples
+
+    def __len__(self):
+        return len(self.samples)
+
+    def __getitem__(self, idx):
+        h_0, z, t, h_t = self.samples[idx]
+        return h_0, z, t, h_t
+
+
+def setup_data(config):
+    profile_data = ProfileDataset(
+        data_dir=config["data_dir"],
+        experiment_numbers=config["exp_nums"],
+        valid_solutes=config["valid_solutes"],
+        valid_substrates=config["valid_substrates"],
+        valid_temps=config["valid_temps"],
+        temporal_subsample=config["temporal_subsample"],
+        spatial_subsample=config["spatial_subsample"],
+        dtype=torch.float32,
+        use_log_transform=config["use_log_transform"],
+    )
+
+    if config["model_type"] == "node":
+        dataset = NODEDataset(profile_data=profile_data, traj_len=config["traj_len"])
+    elif config["model_type"] == "fno":
+        dataset = FNODataset(profile_data=profile_data)
+
+    # Split dataset into training and validation sets
+    dataset_size = len(dataset)
+    val_size = int(config["val_ratio"] * dataset_size)
+    train_size = dataset_size - val_size
+    train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
+
+    # Set up DataLoaders
+    train_loader = DataLoader(
+        train_dataset, batch_size=config["batch_size"], shuffle=True
+    )
+    val_loader = DataLoader(val_dataset, batch_size=config["batch_size"], shuffle=False)
+
+    return train_loader, val_loader, profile_data
+
+
 def setup_node_data(
     traj_len,
-    data_len=7_000,
     batch_size=32,
     exp_nums=None,
     valid_solutes=None,
@@ -443,7 +508,6 @@ def setup_node_data(
     test_split=0.1,
 ):
     profile_data = ProfileDataset(
-        data_len=data_len,
         data_dir=data_dir,
         experiment_numbers=exp_nums,
         valid_solutes=valid_solutes,
@@ -463,6 +527,47 @@ def setup_node_data(
     val_size = int(test_split * dataset_size)
     train_size = dataset_size - val_size
     train_dataset, val_dataset = random_split(node_dataset, [train_size, val_size])
+
+    # Set up DataLoaders
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+
+    return train_loader, val_loader, profile_data
+
+
+def setup_fno_data(
+    batch_size=32,
+    exp_nums=None,
+    valid_solutes=None,
+    valid_substrates=None,
+    valid_temps=None,
+    temporal_subsample=10,
+    spatial_subsample=2,
+    use_log_transform=True,
+    data_dir="data",
+    test_split=0.1,
+):
+    # Load the profile dataset
+    profile_data = ProfileDataset(
+        data_dir=data_dir,
+        experiment_numbers=exp_nums,
+        valid_solutes=valid_solutes,
+        valid_substrates=valid_substrates,
+        valid_temps=valid_temps,
+        temporal_subsample=temporal_subsample,
+        spatial_subsample=spatial_subsample,
+        dtype=torch.float32,
+        use_log_transform=use_log_transform,
+    )
+
+    # Create FNODataset
+    fno_dataset = FNODataset(profile_data=profile_data)
+
+    # Split dataset into training and validation sets
+    dataset_size = len(fno_dataset)
+    val_size = int(test_split * dataset_size)
+    train_size = dataset_size - val_size
+    train_dataset, val_dataset = random_split(fno_dataset, [train_size, val_size])
 
     # Set up DataLoaders
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
