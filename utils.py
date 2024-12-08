@@ -7,6 +7,7 @@ import scipy.io
 import load_data
 from scipy.ndimage import median_filter, gaussian_filter
 
+
 def load_single_mat_file(filename):
     contents = scipy.io.loadmat(filename)
     real_contents = contents["answer"]
@@ -155,25 +156,37 @@ def center_data(dataset, mode="max"):
 
     return shifted_dataset
 
-def smooth_profile(profile, filter_size=40, sigma=10, temporal_filter=5, temporal_sigma=2):
+
+def smooth_profile(
+    profile, filter_size=40, sigma=10, temporal_filter=5, temporal_sigma=2
+):
     profile_np = profile.numpy()
     # filter / smooth in space
-    filtered_profile = median_filter(profile_np, size=(1, filter_size)) # time filter, space filter
-    smoothed_profile = gaussian_filter(filtered_profile, sigma=(0, sigma)) # time sigma, space sigma
+    filtered_profile = median_filter(
+        profile_np, size=(1, filter_size)
+    )  # time filter, space filter
+    smoothed_profile = gaussian_filter(
+        filtered_profile, sigma=(0, sigma)
+    )  # time sigma, space sigma
     # filter / smooth in time
     filtered_profile = median_filter(smoothed_profile, size=(temporal_filter, 1))
     smoothed_profile = gaussian_filter(filtered_profile, sigma=(temporal_sigma, 0))
     processed_profile = torch.tensor(smoothed_profile, dtype=profile.dtype)
     return processed_profile
 
+
 def vertical_crop_profile(profile, threshold=0.8):
-    return torch.max(torch.zeros_like(profile), profile - threshold*torch.max(profile[-1]))
+    return torch.max(
+        torch.zeros_like(profile), profile - threshold * torch.max(profile[-1])
+    )
+
 
 def pad_profile(profile, pad=32):
     last_frame = profile[-1:]
     padding_frames = last_frame.repeat(pad, *[1] * (profile.dim() - 1))
     padded_profile = torch.cat([profile, padding_frames], dim=0)
     return padded_profile
+
 
 def load_first_sheet_data():
     all_data_dict = load_drop_data_from_xlsx()
