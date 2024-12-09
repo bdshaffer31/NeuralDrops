@@ -80,6 +80,8 @@ def setup_cap_initial_h_profile(r, h0, r_c):
 
 def mass_loss (r,theta):
     p_sat = 10**(params.A-params.B/(params.C+params.T-273.15)) #Antoine's Equation
+    p_sat = p_sat/760.0*101325.0 # conversion (mmHg) to (Pa)
+    #print(p_sat)
 
     R_c = params.r_c #TODO
     b_c = 1.0 #TODO
@@ -101,6 +103,7 @@ def mass_loss (r,theta):
     #integral_array = vmap(integral)(cosh_alpha)
     N_prime_alpha = np.sqrt(2)*np.power(np.sqrt((cosh_alpha+np.cos(theta))),3)
     J_c = np.pi*N_prime_alpha*integral/(2*np.sqrt(2)*np.square(np.pi-theta))
+    J_c[-1]=J_c[-2]*2
 
     J_term = (b_c - params.RH)*J_c + J_delta
 
@@ -134,7 +137,7 @@ params = SimulationParams(
     C = 233.4,
     D = 2.42e-5,
     Mw = 0.018,
-    Rs = 496.5,
+    Rs = 8.314, # Gas Constant (J/(K*mol))
     T = 293.15,
     RH = 0.20,
 )
