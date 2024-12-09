@@ -99,7 +99,7 @@ def mass_loss (r,theta):
                                            , np.arccosh(cosh_alpha[i]) , np.inf)
 
     #integral_array = vmap(integral)(cosh_alpha)
-    N_prime_alpha = np.power(np.sqrt(2*(cosh_alpha+np.cos(theta))),3)
+    N_prime_alpha = np.sqrt(2)*np.power(np.sqrt((cosh_alpha+np.cos(theta))),3)
     J_c = np.pi*N_prime_alpha*integral/(2*np.sqrt(2)*np.square(np.pi-theta))
 
     J_term = (b_c - params.RH)*J_c + J_delta

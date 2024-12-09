@@ -3,7 +3,7 @@ import numpy as np
 from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
 from dataclasses import dataclass
-
+import scipy.integrate as integrate
 from scipy.ndimage import gaussian_filter
 
 
@@ -212,7 +212,7 @@ def h_mask_grid(grid_data, h, z):
                 masked_grid[i, j] = 0
     return masked_grid
 
-def mass_loss (r,theta):
+def mass_loss (params,field_vars,r,theta):
     p_sat = 10**(params.A-params.B/(params.C+params.T-273.15)) #Antoine's Equation
 
     R_c = params.r_c #TODO
@@ -228,7 +228,7 @@ def mass_loss (r,theta):
                                            (np.cosh(np.pi*x/(2.0*np.pi-2.0*theta))*np.sqrt(np.cosh(x)-cosh_alpha[i]))
                                            , np.arccosh(cosh_alpha[i]) , np.inf)
 
-    N_prime_alpha = np.power(np.sqrt(2*(cosh_alpha+np.cos(theta))),3)
+    N_prime_alpha = np.sqrt(2)*np.power(np.sqrt((cosh_alpha+np.cos(theta))),3)
     J_c = np.pi*N_prime_alpha*integral/(2*np.sqrt(2)*np.square(np.pi-theta))
 
     J_term = (b_c - params.RH)*J_c + J_delta
@@ -237,7 +237,7 @@ def mass_loss (r,theta):
     return m_dot
 
 
-def evap_velocity (m_dot,h):
+def evap_velocity (params,m_dot,h):
     dh_dr = as_grad(h,params.dr)
     w_e = -m_dot/params.rho* np.sqrt(1 + np.square(dh_dr))
     return w_e
