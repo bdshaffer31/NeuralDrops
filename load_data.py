@@ -346,6 +346,7 @@ class NODEDataset(Dataset):
         """
         self.profile_data = profile_data
         self.traj_len = traj_len
+        self.time_steps = self.get_time_steps()
         self.samples = self._prepare_samples()
 
     def _prepare_samples(self):
@@ -357,7 +358,8 @@ class NODEDataset(Dataset):
                 initial_condition = profile[t]
                 target_snapshots = profile[t + 1 : t + 1 + self.traj_len]
                 conditioning = self.profile_data.get_conditioning(file)
-                samples.append((initial_condition, conditioning, target_snapshots))
+                time_steps = self.time_steps
+                samples.append((time_steps, initial_condition, conditioning, target_snapshots))
         return samples
 
     def get_time_steps(self):
@@ -474,7 +476,7 @@ def setup_data(config):
         use_log_transform=config["use_log_transform"],
     )
 
-    if config["model_type"] == "node":
+    if config["model_type"] in ["node", "flux_fno"]:
         dataset = NODEDataset(profile_data=profile_data, traj_len=config["traj_len"])
     elif config["model_type"] == "fno":
         dataset = FNODataset(profile_data=profile_data)
@@ -490,88 +492,6 @@ def setup_data(config):
         train_dataset, batch_size=config["batch_size"], shuffle=True
     )
     val_loader = DataLoader(val_dataset, batch_size=config["batch_size"], shuffle=False)
-
-    return train_loader, val_loader, profile_data
-
-
-def setup_node_data(
-    traj_len,
-    batch_size=32,
-    exp_nums=None,
-    valid_solutes=None,
-    valid_substrates=None,
-    valid_temps=None,
-    temporal_subsample=10,
-    spatial_subsample=2,
-    use_log_transform=True,
-    data_dir="data",
-    test_split=0.1,
-):
-    profile_data = ProfileDataset(
-        data_dir=data_dir,
-        experiment_numbers=exp_nums,
-        valid_solutes=valid_solutes,
-        valid_substrates=valid_substrates,
-        valid_temps=valid_temps,
-        temporal_subsample=temporal_subsample,
-        spatial_subsample=spatial_subsample,
-        dtype=torch.float32,
-        use_log_transform=use_log_transform,
-    )
-
-    # Create NODEDataset with the specified trajectory length
-    node_dataset = NODEDataset(profile_data=profile_data, traj_len=traj_len)
-
-    # Split dataset into training and validation sets
-    dataset_size = len(node_dataset)
-    val_size = int(test_split * dataset_size)
-    train_size = dataset_size - val_size
-    train_dataset, val_dataset = random_split(node_dataset, [train_size, val_size])
-
-    # Set up DataLoaders
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-
-    return train_loader, val_loader, profile_data
-
-
-def setup_fno_data(
-    batch_size=32,
-    exp_nums=None,
-    valid_solutes=None,
-    valid_substrates=None,
-    valid_temps=None,
-    temporal_subsample=10,
-    spatial_subsample=2,
-    use_log_transform=True,
-    data_dir="data",
-    test_split=0.1,
-):
-    # Load the profile dataset
-    profile_data = ProfileDataset(
-        data_dir=data_dir,
-        experiment_numbers=exp_nums,
-        valid_solutes=valid_solutes,
-        valid_substrates=valid_substrates,
-        valid_temps=valid_temps,
-        temporal_subsample=temporal_subsample,
-        spatial_subsample=spatial_subsample,
-        dtype=torch.float32,
-        use_log_transform=use_log_transform,
-    )
-
-    # Create FNODataset
-    fno_dataset = FNODataset(profile_data=profile_data)
-
-    # Split dataset into training and validation sets
-    dataset_size = len(fno_dataset)
-    val_size = int(test_split * dataset_size)
-    train_size = dataset_size - val_size
-    train_dataset, val_dataset = random_split(fno_dataset, [train_size, val_size])
-
-    # Set up DataLoaders
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
     return train_loader, val_loader, profile_data
 
