@@ -447,7 +447,7 @@ def run():
         dz=5e-4 / 110,  # Vertical grid spacing
         dt=5e-5,  # Time step size eg 1e-5
         rho=1,  # Density of the liquid (kg/m^3) eg 1
-        w_e=0.0, # -1e-3,  # Constant evaporation rate (m/s) eg 1e-4
+        w_e=-1e-3, # -1e-3,  # Constant evaporation rate (m/s) eg 1e-4
         sigma=0.072,  # Surface tension (N/m) eg 0.072
         eta=1e-3,  # Viscosity (Pa*s) eg 1e-3
         d_sigma_dr=0.0,  # Surface tension gradient
@@ -470,9 +470,10 @@ def run():
         r, params.hmax0, params.r_c, drop_fraction=1.0, order=4
     )
     eval(params, r, z, field_vars, h_0.copy())
+    h_profiles = run_forward_euler_simulation(params, r, z, field_vars, h_0.copy())
 
     # plot the velocity profile and 
-    inspect(params, r, z, field_vars, h_0.copy())
+    inspect(params, r, z, field_vars, h_profiles[-1])
     plot_velocity(params, r, z, field_vars, h_0.copy())
 
 
