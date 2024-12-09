@@ -60,32 +60,31 @@ def train_node(
     logger.save_model(model, file_name="final_model.pth")
 
 
-def load_node_model_from_logger(log_loader):
+def load_fno_model_from_logger(log_loader):
     config = log_loader.load_config()
-
     activation_fn = networks.get_activation(config["activation_fn"])
-    output_fn = networks.get_activation(config["output_fn"])
 
-    # setup the model from the config parameters
-    ode_func = networks.ODE_FCNN(
+    # Setup the FNO Flux model from the config parameters
+    fno_model = networks.FNO_Flux(
         input_dim=config.get("input_dim"),
         output_dim=config.get("output_dim"),
-        conditioning_dim=config.get("conditioning_dim"),
-        hidden_dim=config.get("hidden_dim"),
-        num_hidden_layers=config.get("num_hidden_layers"),
+        num_fno_layers=config.get("num_fno_layers"),
+        modes=config.get("modes"),
+        width=config.get("fno_width"),
         activation_fn=activation_fn,
-        output_fn=output_fn,
+        num_fc_layers=config.get("num_fc_layers"),
+        fc_width=config.get("fc_width"),
     )
-    model = networks.NeuralODE(ode_func, solver=config["solver"])
+    ode_func = networks.FNOFluxODEWrapper(fno_model)
+    # model = networks.NeuralODE(ode_func, config.get("solver"))
+    model = networks.ForwardEuler(ode_func)
 
     # Load the best validation model
-    best_model_path = log_loader.get_relpath("best_model.pth")
     best_model_path = log_loader.get_relpath("best_model.pth")
     model.load_state_dict(torch.load(best_model_path))
     model.eval()
 
     return model
-
 
 def run_training(config, run_dir):
     exp_logger = logger.ExperimentLogger(run_dir=run_dir, use_timestamp=False)
@@ -95,25 +94,31 @@ def run_training(config, run_dir):
 
     # Initialize ODE model, loss function, and optimizer
     train_time_steps, initial_condition, conditioning, target_snapshots = next(iter(train_loader))
-    input_dim = initial_condition.shape[1]
-    output_dim = target_snapshots.shape[2]
+    grid_size = initial_condition.shape[1]
     conditioning_dim = conditioning.shape[1]
-    activation_fn = networks.get_activation(config["activation_fn"])
-    output_fn = networks.get_activation(config["output_fn"])
+    input_dim = 1 + conditioning_dim  # h_0 + conditioning variables
+    output_dim = 1
+
+    config["grid_size"] = grid_size
+    config["conditioning_dim"] = conditioning_dim
     config["input_dim"] = input_dim
     config["output_dim"] = output_dim
-    config["conditioning_dim"] = conditioning.shape[1]
+    activation_fn = networks.get_activation(config["activation_fn"])
 
-    ode_func = networks.ODE_FCNN(
-        input_dim=input_dim,
-        conditioning_dim=conditioning_dim,
-        output_dim=output_dim,
-        hidden_dim=config["hidden_dim"],
-        num_hidden_layers=config["num_hidden_layers"],
+    fno_model = networks.FNO_Flux(
+        input_dim,
+        output_dim,
+        num_fno_layers=config["num_fno_layers"],
+        modes=config["modes"],
+        width=config["fno_width"],
         activation_fn=activation_fn,
-        output_fn=output_fn,
+        num_fc_layers=config["num_fc_layers"],
+        fc_width=config["fc_width"],
     )
-    model = networks.NeuralODE(ode_func, solver=config["solver"])
+    ode_func = networks.FNOFluxODEWrapper(fno_model)
+    # model = networks.NeuralODE(ode_func, solver=config["solver"])
+    model = networks.ForwardEuler(ode_func)
+
 
     exp_logger.log_config(config)
 
@@ -137,33 +142,33 @@ def main(train=False):
     config = {
         # training params
         "manual_seed": 42,
-        "num_epochs": 2,
+        "num_epochs": 10,
         "lr": 1e-2,
         # model params
-        "model_type": "node",
-        "hidden_dim": 256,
-        "num_hidden_layers": 6,
-        "solver": "rk4",
+        "model_type": "flux_fno",
+        "modes": 16,
+        "num_fno_layers": 4,
+        "fno_width": 64,
+        "num_fc_layers": 4,
+        "fc_width": 256,
         "activation_fn": "relu",
-        "output_fn": "identity",
+        "solver": "rk4",
         # data params
         "data_dir": "data",
         "batch_size": 32,
-        "exp_nums": [
-            1
-        ],  # [10,15,18,9,6,8,48,47], #None,  # [19, 22, 23, 27],  # if None use all, otherwise give a list of ints
+        "exp_nums": [10,15,18,9,6,8,48,47], #None,  # [19, 22, 23, 27],  # if None use all, otherwise give a list of ints
         "valid_solutes": None,  # if None keep all solutes, otherwise give a list of strings
         "valid_substrates": None,  # if None keep all substrates, otherwise give a list of strings
         "valid_temps": None,  # if None keep all substrates, otherwise give a list of floats
         "temporal_subsample": 15,  # temporal subsampling on profile data
         "spatial_subsample": 5,
         "use_log_transform": False,
-        "traj_len": 64,
+        "traj_len": 32,
         "val_ratio": 0.1,
     }
     torch.manual_seed(config["manual_seed"])
 
-    run_dir = "test_different_length"
+    run_dir = "run_fno_flux"
     if train:
         run_training(config, run_dir)
     visualize.viz_results(run_dir)
