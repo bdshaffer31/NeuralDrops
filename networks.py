@@ -53,6 +53,255 @@ class NeuralODE(nn.Module):
         return odeint(self.ode_func, x0, t, method=self.solver)
 
 
+class FNO(nn.Module):
+    def __init__(
+        self,
+        input_dim,
+        output_dim,
+        num_fno_layers=4,
+        modes=16,
+        width=64,
+        activation_fn=nn.ReLU(),
+        num_fc_layers=2,
+        fc_width=128,
+    ):
+        """
+        Generalized Fourier Neural Operator.
+
+        Args:
+            input_dim (int): Number of input features per grid point.
+            output_dim (int): Number of output features per grid point.
+            num_fno_layers (int): Number of Fourier layers.
+            modes (int): Number of Fourier modes to retain.
+            width (int): Number of channels in Fourier layers.
+            activation_fn (torch.nn.Module): Activation function.
+            fc_width (int): Size of the first fully connected hidden layer.
+            num_fc_layers (int): Number of fully connected layers after Fourier layers.
+        """
+        super(FNO, self).__init__()
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        self.num_fno_layers = num_fno_layers
+        self.modes = modes
+        self.width = width
+        self.fc_width = fc_width
+        self.activation_fn = activation_fn
+        self.num_fc_layers = num_fc_layers
+
+        # Input projection layer
+        self.fc0 = nn.Linear(self.input_dim, self.width)
+
+        # Fourier layers
+        self.fourier_layers = nn.ModuleList(
+            [
+                SpectralConv1d(self.width, self.width, self.modes)
+                for _ in range(self.num_fno_layers)
+            ]
+        )
+        self.w = nn.ModuleList(
+            [nn.Conv1d(self.width, self.width, 1) for _ in range(self.num_fno_layers)]
+        )
+
+        # Fully connected layers after Fourier layers
+        fc_layers = [nn.Linear(self.width, self.fc_width), self.activation_fn]
+        for _ in range(self.num_fc_layers - 2):
+            fc_layers.append(nn.Linear(self.fc_width, self.fc_width))
+            fc_layers.append(self.activation_fn)
+        fc_layers.append(nn.Linear(self.fc_width, self.output_dim))
+        self.final_fc = nn.Sequential(*fc_layers)
+
+    def forward(self, h_0, z, t):
+        batch_size, grid_size = h_0.shape
+
+        # Expand z and t to match the spatial dimensions of h_0
+        z_expanded = z.unsqueeze(1).expand(
+            batch_size, grid_size, -1
+        )
+        t_expanded = t.unsqueeze(1).expand(
+            batch_size, grid_size, -1
+        )
+
+        h_0_expanded = h_0.unsqueeze(-1)
+
+        # Concatenate inputs
+        input_data = torch.cat(
+            [h_0_expanded, z_expanded, t_expanded], dim=-1
+        )
+
+        # lift to feature space with first fully connect layer
+        x = self.fc0(input_data)
+        x = x.permute(0, 2, 1)
+
+        # Apply Fourier layers
+        for fourier_layer, w_layer in zip(self.fourier_layers, self.w):
+            x1 = fourier_layer(x)
+            x2 = w_layer(x)
+            x = x1 + x2
+            x = self.activation_fn(x)
+
+        x = x.permute(0, 2, 1)
+
+        # Apply final fully connected layers to get to target output size
+        x = self.final_fc(x)
+
+        if self.output_dim == 1:
+            return x.squeeze(-1)
+        return x  # Final output: [batch, grid_size, output_dim]
+
+
+class SpectralConv1d(nn.Module):
+    def __init__(self, in_channels, out_channels, modes):
+        super(SpectralConv1d, self).__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.modes = modes
+
+        self.scale = 1 / (in_channels * out_channels)
+        self.weights = nn.Parameter(
+            self.scale
+            * torch.rand(in_channels, out_channels, self.modes, dtype=torch.cfloat)
+        )
+
+    def compl_mul1d(self, input, weights):
+        # Complex multiplication
+        return torch.einsum("bix,iox->box", input, weights)
+
+    def forward(self, x):
+        # Perform FFT
+        batchsize = x.shape[0]
+        x_ft = torch.fft.rfft(x)
+
+        # Multiply relevant modes
+        out_ft = torch.zeros_like(x_ft, dtype=torch.cfloat)
+        out_ft[:, :, : self.modes] = self.compl_mul1d(
+            x_ft[:, :, : self.modes], self.weights
+        )
+
+        # Perform Inverse FFT
+        x = torch.fft.irfft(out_ft, n=x.size(-1))
+        return x
+
+
+# ================================
+# Flux modeling FNO implementation
+# ================================
+
+class FNO_Flux(FNO):
+    def __init__(
+        self,
+        *args,
+        **kwargs
+    ):
+        """
+        Generalized Fourier Neural Operator.
+
+        Args:
+            input_dim (int): Number of input features per grid point.
+            output_dim (int): Number of output features per grid point.
+            num_fno_layers (int): Number of Fourier layers.
+            modes (int): Number of Fourier modes to retain.
+            width (int): Number of channels in Fourier layers.
+            activation_fn (torch.nn.Module): Activation function.
+            fc_width (int): Size of the first fully connected hidden layer.
+            num_fc_layers (int): Number of fully connected layers after Fourier layers.
+        """
+        super(FNO_Flux, self).__init__(*args, **kwargs)
+
+    def forward(self, h_0, z):
+        batch_size, grid_size = h_0.shape
+
+        # Expand z and t to match the spatial dimensions of h_0
+        z_expanded = z.unsqueeze(1).expand(
+            batch_size, grid_size, -1
+        )
+
+        h_0_expanded = h_0.unsqueeze(-1)
+
+        # Concatenate inputs
+        input_data = torch.cat(
+            [h_0_expanded, z_expanded], dim=-1
+        )
+
+        # lift to feature space with first fully connect layer
+        x = self.fc0(input_data)
+        x = x.permute(0, 2, 1)
+
+        # Apply Fourier layers
+        for fourier_layer, w_layer in zip(self.fourier_layers, self.w):
+            x1 = fourier_layer(x)
+            x2 = w_layer(x)
+            x = x1 + x2
+            x = self.activation_fn(x)
+        
+        x = x.permute(0, 2, 1)
+
+        # Apply final fully connected layers to get to target output size
+        x = self.final_fc(x)
+
+        if self.output_dim == 1:
+            return x.squeeze(-1)
+        return x  # Final output: [batch, grid_size, output_dim]
+
+class FNOFluxODEWrapper(nn.Module):
+    def __init__(self, fno_model):
+        super(FNOFluxODEWrapper, self).__init__()
+        self.fno_model = fno_model
+        self.conditioning = None
+
+    def set_conditioning(self, z):
+        self.conditioning = z
+
+    def forward(self, t, h):
+        # Predict the evaporative flux
+        # print(h.dtype)
+        # TODO getting complex h values
+        flux = self.fno_model(h, self.conditioning)
+        return -flux  # Negative sign to represent evaporation
+
+class ForwardEuler(nn.Module):
+    def __init__(self, ode_func):
+        super(ForwardEuler, self).__init__()
+        self.ode_func = ode_func
+
+    def forward(self, x0, z, t):
+        self.ode_func.set_conditioning(z)
+        num_steps = len(t)
+        dt = t[1] - t[0]
+        x_history = torch.zeros((num_steps, *x0.shape), dtype=x0.dtype, device=x0.device)
+        x = x0
+        x_history[0] = x
+        for i in range(1, num_steps):
+            x = x + dt * self.ode_func(t[i - 1], x)
+            x_history[i] = torch.max(torch.zeros_like(x), x) # height always positive !!!
+
+        return x_history
+
+class RK4(nn.Module):
+    def __init__(self, ode_func):
+        super(RK4, self).__init__()
+        self.ode_func = ode_func
+
+    def forward(self, x0, z, t):
+        self.ode_func.set_conditioning(z)
+        num_steps = len(t)
+        dt = t[1] - t[0]
+        x_history = torch.zeros((num_steps, *x0.shape), dtype=x0.dtype, device=x0.device)
+        x = x0
+        x_history[0] = x
+
+        for i in range(1, num_steps):
+            t_i = t[i - 1]
+            
+            k1 = self.ode_func(t_i, x)
+            k2 = self.ode_func(t_i + dt / 2, x + dt * k1 / 2)
+            k3 = self.ode_func(t_i + dt / 2, x + dt * k2 / 2)
+            k4 = self.ode_func(t_i + dt, x + dt * k3)
+
+            x = x + (dt / 6) * (k1 + 2 * k2 + 2 * k3 + k4)
+            x_history[i] = x
+
+        return x_history
+
 class Sine(nn.Module):
     def forward(self, x):
         return torch.sin(x)

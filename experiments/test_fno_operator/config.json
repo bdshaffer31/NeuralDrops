@@ -1,0 +1,28 @@
+{
+    "manual_seed": 42,
+    "num_epochs": 2,
+    "lr": 0.01,
+    "model_type": "fno",
+    "modes": 16,
+    "num_fno_layers": 4,
+    "fno_width": 256,
+    "num_fc_layers": 4,
+    "fc_width": 256,
+    "activation_fn": "relu",
+    "data_dir": "data",
+    "batch_size": 32,
+    "exp_nums": [
+        1
+    ],
+    "valid_solutes": null,
+    "valid_substrates": null,
+    "valid_temps": null,
+    "temporal_subsample": 15,
+    "spatial_subsample": 5,
+    "use_log_transform": false,
+    "val_ratio": 0.1,
+    "grid_size": 256,
+    "conditioning_dim": 5,
+    "input_dim": 7,
+    "output_dim": 1
+}
