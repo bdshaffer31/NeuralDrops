@@ -87,7 +87,7 @@ def setup_cap_initial_h_profile(r, h0, r_c):
     # setup a spherical cap initial height profile
     R = (r_c**2 + h0**2) / (2 * h0)
     theta = np.arccos(1 - h0 * R)
-    h = np.sqrt((2.0*R*(r+R)-np.square(r+R))) - (R-h0)
+    h = np.sqrt((2.0 * R * (r + R) - np.square(r + R))) - (R - h0)
 
     return h
 
@@ -98,30 +98,43 @@ def as_grad(x, dx):
     grad_x = np.gradient(x_padded, dx, edge_order=2)
     return grad_x[1:]
 
+
 def central_diff_4th_order(x, dx):
     kernel = np.array([-1, 8, 0, -8, 1]) / (12 * dx)
-    derivative = np.convolve(x, kernel, mode='same')
+    derivative = np.convolve(x, kernel, mode="same")
     return derivative
+
 
 def five_point_derivative(data, dx):
     """Compute the first derivative using the five-point stencil with boundary handling."""
     n = len(data)
     derivative = np.zeros_like(data)
-    
+
     # Interior points using the five-point stencil
     for i in range(2, n - 2):
-        derivative[i] = (-data[i + 2] + 8 * data[i + 1] - 8 * data[i - 1] + data[i - 2]) / (12 * dx)
-    
+        derivative[i] = (
+            -data[i + 2] + 8 * data[i + 1] - 8 * data[i - 1] + data[i - 2]
+        ) / (12 * dx)
+
     # Boundary points using one-sided stencils
     # Forward difference for the left boundary
-    derivative[0] = (-25 * data[0] + 48 * data[1] - 36 * data[2] + 16 * data[3] - 3 * data[4]) / (12 * dx)
-    derivative[1] = (-3 * data[0] - 10 * data[1] + 18 * data[2] - 6 * data[3] + data[4]) / (12 * dx)
-    
+    derivative[0] = (
+        -25 * data[0] + 48 * data[1] - 36 * data[2] + 16 * data[3] - 3 * data[4]
+    ) / (12 * dx)
+    derivative[1] = (
+        -3 * data[0] - 10 * data[1] + 18 * data[2] - 6 * data[3] + data[4]
+    ) / (12 * dx)
+
     # Backward difference for the right boundary
-    derivative[-1] = (25 * data[-1] - 48 * data[-2] + 36 * data[-3] - 16 * data[-4] + 3 * data[-5]) / (12 * dx)
-    derivative[-2] = (3 * data[-5] - 16 * data[-4] + 36 * data[-3] - 48 * data[-2] + 25 * data[-1]) / (12 * dx)
-    
+    derivative[-1] = (
+        25 * data[-1] - 48 * data[-2] + 36 * data[-3] - 16 * data[-4] + 3 * data[-5]
+    ) / (12 * dx)
+    derivative[-2] = (
+        3 * data[-5] - 16 * data[-4] + 36 * data[-3] - 48 * data[-2] + 25 * data[-1]
+    ) / (12 * dx)
+
     return derivative
+
 
 def gaussian_mollified_derivative(data, dx, sigma=1.0):
     """
@@ -129,51 +142,56 @@ def gaussian_mollified_derivative(data, dx, sigma=1.0):
     """
     # Generate Gaussian-mollified kernel for 5 points
     offsets = np.array([-2, -1, 0, 1, 2])
-    gaussian_weights = np.exp(-0.5 * (offsets / sigma)**2)
+    gaussian_weights = np.exp(-0.5 * (offsets / sigma) ** 2)
     gaussian_weights /= gaussian_weights.sum()  # Normalize weights
-    
+
     # Compute finite difference weights (central difference)
     finite_diff_weights = np.array([-1, -8, 0, 8, 1]) / 12  # Standard 5-point stencil
-    
+
     # Combine Gaussian smoothing with finite difference weights
     kernel = gaussian_weights * finite_diff_weights
-    
+
     # Apply convolution with periodic boundary conditions
-    derivative = np.convolve(data, kernel, mode='same') / dx
-    
+    derivative = np.convolve(data, kernel, mode="same") / dx
+
     # Handle boundaries explicitly (optional, depending on BCs)
     derivative[0] = np.dot(data[:5], kernel) / dx
     derivative[1] = np.dot(data[:5], kernel) / dx
     derivative[-1] = np.dot(data[-5:], kernel[::-1]) / dx
     derivative[-2] = np.dot(data[-5:], kernel[::-1]) / dx
-    
+
     return derivative
+
 
 def calc_curvature(params, r, z, field_vars, h):
     dh_dr = as_grad(h, params.dr)
     curvature_term = (r * dh_dr) / np.sqrt(1 + dh_dr**2)
     return curvature_term
 
+
 def calc_curvature_v2(params, r, z, field_vars, h):
     dh_dr = as_grad(h, params.dr)
     d2h_dr2 = as_grad(dh_dr, params.dr)
-    curvature_term = np.abs(d2h_dr2) / np.sqrt(1 + dh_dr**2)**3
+    curvature_term = np.abs(d2h_dr2) / np.sqrt(1 + dh_dr**2) ** 3
     return curvature_term
+
 
 def calc_pressure(params, r, z, field_vars, h):
     """Compute the radial pressure gradient using the nonlinear curvature formula."""
-    # using Diddens implementation 
+    # using Diddens implementation
     # note, square root should be approximated as unity in the limit h -> 0
     curvature_term = calc_curvature(params, r, z, field_vars, h)
     d_curvature_dr = as_grad(curvature_term, params.dr)
     pressure = -params.sigma * (1 / r) * d_curvature_dr
     return pressure
 
+
 def calc_pressure_v2(params, r, z, field_vars, h):
     """Compute the radial pressure gradient using the nonlinear curvature formula."""
     curvature_term = calc_curvature_v2(params, r, z, field_vars, h)
     pressure = curvature_term * params.sigma * 2
     return pressure
+
 
 def compute_u_velocity(params, r, z, field_vars, h):
     """Compute radial velocity u(r, z, t) using the given equation."""
@@ -274,7 +292,6 @@ def calculate_dh_dt(t, params, r, z, field_vars, h):
     grad_u_r = as_grad(integral_u_r, params.dr)
     grad_u_r = gaussian_filter(grad_u_r, sigma=10)
 
-
     # Calculate dh/dt as radial term plus evaporation rate
     radial_term = (-1 / r) * grad_u_r
     # TODO bcs
@@ -370,7 +387,9 @@ def inspect(params, r, z, field_vars, h):
 
     plt.plot(pressure / np.max(np.abs(pressure)), label="pressure")
     plt.plot(dp_dr / np.max(np.abs(dp_dr)), label="dp/dr")
-    plt.title(f"p max: {np.max(np.abs(pressure))}, std: {np.std(pressure)}, \n pgrad max: {np.max(np.abs(dp_dr))}")
+    plt.title(
+        f"p max: {np.max(np.abs(pressure))}, std: {np.std(pressure)}, \n pgrad max: {np.max(np.abs(dp_dr))}"
+    )
     plt.legend()
     plt.show()
 
@@ -472,8 +491,8 @@ def run():
     eval(params, r, z, field_vars, h_0.copy())
     h_profiles = run_forward_euler_simulation(params, r, z, field_vars, h_0.copy())
 
-    # plot the velocity profile and 
-    inspect(params, r, z, field_vars, h_profiles[-1])
+    # plot the velocity profile and
+    inspect(params, r, z, field_vars, h_0.copy())
     plot_velocity(params, r, z, field_vars, h_0.copy())
 
 

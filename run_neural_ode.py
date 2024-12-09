@@ -14,8 +14,8 @@ def validate_node_model(model, time_steps, val_loader, loss_fn):
     val_loss = 0.0
 
     with torch.no_grad():
-        for x_0, z, y in val_loader:
-            y_pred = model(x_0, z, time_steps).transpose(0, 1)
+        for t, x_0, z, y in val_loader:
+            y_pred = model(x_0, z, t[0]).transpose(0, 1)
             loss = loss_fn(y_pred, y)
             val_loss += loss.item()
 
@@ -24,7 +24,7 @@ def validate_node_model(model, time_steps, val_loader, loss_fn):
 
 def train_node(
     model,
-    trajectory_len,
+    time_steps,
     train_loader,
     val_loader,
     optimizer,
@@ -32,17 +32,14 @@ def train_node(
     num_epochs,
     logger,
 ):
-    # 1 integration step per sample (not a great scheme)
-    time_steps = torch.linspace(0, 1, steps=trajectory_len)
-
     pbar = tqdm(range(num_epochs), desc="Training", unit="epoch")
     for epoch in pbar:
         model.train()
         epoch_loss = 0.0
 
-        for x_0, z, y_traj in train_loader:
+        for t, x_0, z, y_traj in train_loader:
             optimizer.zero_grad()
-            pred_y_traj = model(x_0, z, time_steps).transpose(0, 1)
+            pred_y_traj = model(x_0, z, t[0]).transpose(0, 1)
             loss = loss_fn(pred_y_traj, y_traj)
             loss.backward()
             optimizer.step()
@@ -66,29 +63,23 @@ def train_node(
 def load_node_model_from_logger(log_loader):
     config = log_loader.load_config()
 
-    input_dim = config.get("input_dim")
-    output_dim = config.get("output_dim")
-    conditioning_dim = config.get("conditioning_dim")
-    hidden_dim = config.get("hidden_dim")
-    num_hidden_layers = config.get("num_hidden_layers")
     activation_fn = networks.get_activation(config["activation_fn"])
     output_fn = networks.get_activation(config["output_fn"])
 
-    # Load the best model from the logger
-    best_model_path = log_loader.get_relpath("best_model.pth")
-    # needs to take activ as a string
+    # setup the model from the config parameters
     ode_func = networks.ODE_FCNN(
-        input_dim=input_dim,
-        output_dim=output_dim,
-        conditioning_dim=conditioning_dim,
-        hidden_dim=hidden_dim,
-        num_hidden_layers=num_hidden_layers,
+        input_dim=config.get("input_dim"),
+        output_dim=config.get("output_dim"),
+        conditioning_dim=config.get("conditioning_dim"),
+        hidden_dim=config.get("hidden_dim"),
+        num_hidden_layers=config.get("num_hidden_layers"),
         activation_fn=activation_fn,
         output_fn=output_fn,
     )
     model = networks.NeuralODE(ode_func, solver=config["solver"])
 
     # Load the best validation model
+    best_model_path = log_loader.get_relpath("best_model.pth")
     best_model_path = log_loader.get_relpath("best_model.pth")
     model.load_state_dict(torch.load(best_model_path))
     model.eval()
@@ -99,27 +90,11 @@ def load_node_model_from_logger(log_loader):
 def run_training(config, run_dir):
     exp_logger = logger.ExperimentLogger(run_dir=run_dir, use_timestamp=False)
 
-    traj_len = config["traj_len"]
-    # if we just set up a data parameters sub dict we can pass it as *args
-    # and it wouldn't require editing this when we change config setup
-    data = load_data.setup_node_data(
-        traj_len,
-        data_len=config["data_len"],
-        batch_size=config["batch_size"],
-        exp_nums=config["exp_nums"],
-        valid_solutes=config["valid_solutes"],
-        valid_substrates=config["valid_substrates"],
-        valid_temps=config["valid_temps"],
-        temporal_subsample=config["temporal_subsample"],
-        spatial_subsample=config["spatial_subsample"],
-        use_log_transform=config["use_log_transform"],
-        data_dir=config["data_dir"],
-        test_split=config["val_ratio"],
-    )
-    train_loader, val_loader, profile_data = data
+    data = load_data.setup_data(config)
+    train_loader, val_loader, dataset = data
 
     # Initialize ODE model, loss function, and optimizer
-    initial_condition, conditioning, target_snapshots = next(iter(train_loader))
+    train_time_steps, initial_condition, conditioning, target_snapshots = next(iter(train_loader))
     input_dim = initial_condition.shape[1]
     output_dim = target_snapshots.shape[2]
     conditioning_dim = conditioning.shape[1]
@@ -148,7 +123,7 @@ def run_training(config, run_dir):
     # Train the Neural ODE model
     train_node(
         model,
-        traj_len,
+        train_time_steps,
         train_loader,
         val_loader,
         optimizer,
@@ -162,9 +137,10 @@ def main(train=False):
     config = {
         # training params
         "manual_seed": 42,
-        "num_epochs": 10,
+        "num_epochs": 2,
         "lr": 1e-2,
         # model params
+        "model_type": "node",
         "hidden_dim": 256,
         "num_hidden_layers": 6,
         "solver": "rk4",
@@ -172,10 +148,11 @@ def main(train=False):
         "output_fn": "identity",
         # data params
         "data_dir": "data",
-        "data_len": 7000,
         "batch_size": 32,
-        "exp_nums": [10,15,18,9,6,8,48,47], #None,  # [19, 22, 23, 27],  # if None use all, otherwise give a list of ints
-        "valid_solutes": None, # if None keep all solutes, otherwise give a list of strings
+        "exp_nums": [
+            1
+        ],  # [10,15,18,9,6,8,48,47], #None,  # [19, 22, 23, 27],  # if None use all, otherwise give a list of ints
+        "valid_solutes": None,  # if None keep all solutes, otherwise give a list of strings
         "valid_substrates": None,  # if None keep all substrates, otherwise give a list of strings
         "valid_temps": None,  # if None keep all substrates, otherwise give a list of floats
         "temporal_subsample": 15,  # temporal subsampling on profile data
@@ -189,7 +166,7 @@ def main(train=False):
     run_dir = "test_different_length"
     if train:
         run_training(config, run_dir)
-    visualize.viz_node_results(run_dir)
+    visualize.viz_results(run_dir)
 
 
 if __name__ == "__main__":
