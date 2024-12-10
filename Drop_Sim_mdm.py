@@ -155,6 +155,17 @@ def compute_u_velocity(params, r, z, field_vars, h):
 
     return u_grid
 
+def compute_w_velocity(params, r, z, field_vars, h):
+    w_grid = np.zeros_like(field_vars.w_grid)
+    ur_grid = field_vars.u_grid * r[:, None]
+    d_ur_grid_dr = np.gradient(ur_grid, params.dr, axis=0)
+    integrand = (1 / r[:, None]) * d_ur_grid_dr
+    for j in range(1, len(z)):  # ignore BC
+        w_grid[:, j] = -1 * np.trapz(integrand[:, : j + 1], dx=params.dz, axis=1)
+    w_grid = interp_h_mask_grid(w_grid, h, z)
+    w_grid[0, :] = w_grid[1, :]  # hack to deal with numerical issues at r ~ 0
+    return w_grid
+
 def calculate_dh_dt(t, params, r, z, field_vars, h):
     """Calculate dh/dt from u velocities for integration with solve_ivp"""
     h = h.reshape(len(r))
@@ -195,143 +206,81 @@ def run_forward_euler_simulation(params, r, z, field_vars, h0):
     h_profiles = np.array(h_profiles)
     return h_profiles
 
+def plot_height_profile_evolution(r, h_profiles, params, n_lines=5):
+    """Plot the evolution of the height profile over time."""
+    plt.figure(figsize=(10, 6))
+    for i, h_t in enumerate(h_profiles[::50]):
+        plt.plot(r * 1e-3, h_t * 1e-3, c="dimgrey")
+    plt.plot(r * 1e-3, h_profiles[0] * 1e-3, c="k", label="h0")
+    plt.plot(r * 1e-3, h_profiles[-1] * 1e-3, c="r", label="Final")
+    plt.xlabel("Radius (mm)")
+    plt.ylabel("Height (mm)")
+    plt.legend()
+    plt.title("Evolution of Droplet Height Profile Over Time")
+    plt.show()
+
+
 def eval(params, r, z, field_vars, h0):
     h_profiles = run_forward_euler_simulation(params, r, z, field_vars, h0)
+    plot_height_profile_evolution(r, h_profiles, params)
     return h_profiles
 
-def run():
-    params = SimulationParams(
-        r_c=1e-3,  # Radius of the droplet in meters
-        hmax0=5e-4,  # Initial droplet height at the center in meters
-        Nr=399,  # Number of radial points
-        Nz=111,  # Number of z-axis points
-        Nt=100,  # Number of time steps
-        dr=2.0 * 1e-3 / (399),  # Radial grid spacing
-        dz=5e-4 / (111),  # Vertical grid spacing
-        dt=1e-4,  # Time step size                         Largest tested: 1e-3
-        rho=1,  # Density of the liquid (kg/m^3) eg 1
-        w_e=0.0, # -1e-3,  # Constant evaporation rate (m/s) eg 1e-4
-        sigma=0.072,  # Surface tension (N/m) eg 0.072
-        eta=1e-3,  # Viscosity (Pa*s) eg 1e-3
-        d_sigma_dr=0.0,  # Surface tension gradient
 
-        A = 8.07131, # Antoine Equation (-)
-        B = 1730.63, # Antoine Equation (-)
-        C = 233.4, # Antoine Equation (-)
-        D = 2.42e-5, # Diffusivity of H2O in Air (m^2/s)
-        Mw = 0.018, # Molecular weight H2O vapor (kg/mol)
-        Rs = 8.314, # Gas Constant (J/(K*mol))
-        T = 293.15, # Ambient Temperature (K)
-        RH = 0.20, # Relative Humidity (-)
-    )
-
-    # Initialize the grids and field variables
-    r, z, field_vars = setup_grids(params)
-
-    h = setup_parabolic_initial_h_profile(r, params.hmax0, params.r_c)
-
-    # Plot
-    plt.rcParams.update({'font.size': 16})
-    plt.rcParams['axes.linewidth']=3
-
-    plt.figure(figsize = (12,7))
-    plt.plot(r,h)
-    plt.xlabel(r'$r$')
-    plt.ylabel(r'$h(r)$')
-
-    #print(params.dr)
-    #print(r)
-
+def inspect(params, r, z, field_vars, h):
     dh_dr = as_grad(h, params.dr)
-    d2h_dr2 = as_grad(dh_dr, params.dr)
-
-    R_large = (params.r_c**2+params.hmax0**2)/(2*params.hmax0)
-    dh_dr_2 = (-r)/ np.sqrt((2.0*R_large*(r+R_large)-np.square(r+R_large)))
-    d2h_dr2_2 = -np.square(R_large) / np.sqrt(np.square(R_large)-np.square(r))**3
-
-    # Plot
-    plt.rcParams.update({'font.size': 16})
-    plt.rcParams['axes.linewidth']=3
-
-    plt.figure(figsize = (12,7))
-    plt.plot(r,dh_dr)
-    plt.plot(r,dh_dr_2)
-    plt.xlabel(r'$r$')
-    plt.ylabel(r'$d2hdr2(r)$')
-
-    # Plot
-    plt.rcParams.update({'font.size': 16})
-    plt.rcParams['axes.linewidth']=3
-
-    plt.figure(figsize = (12,7))
-    plt.plot(r,d2h_dr2)
-    plt.plot(r,d2h_dr2_2)
-    plt.xlabel(r'$r$')
-    plt.ylabel(r'$d2hdr2(r)$')
-
     curvature_term = (r * dh_dr) / np.sqrt(1 + dh_dr**2)
     d_curvature_dr = as_grad(curvature_term, params.dr)
-
-    # Plot
-    plt.rcParams.update({'font.size': 16})
-    plt.rcParams['axes.linewidth']=3
-
-    plt.figure(figsize = (12,7))
-    plt.plot(r,curvature_term)
-    plt.xlabel(r'$r$')
-    plt.ylabel(r'curvature_term')
-
-    # Plot
-    plt.rcParams.update({'font.size': 16})
-    plt.rcParams['axes.linewidth']=3
-
-    plt.figure(figsize = (12,7))
-    plt.plot(r,d_curvature_dr)
-    plt.xlabel(r'$r$')
-    plt.ylabel(r'd_curvature_dr')
-
     pressure = calc_pressure(params, r, z, field_vars, h)
     dp_dr = as_grad(pressure, params.dr)
-
-    # Plot
-    plt.rcParams.update({'font.size': 16})
-    plt.rcParams['axes.linewidth']=3
-
-    plt.figure(figsize = (12,7))
-    plt.plot(r,pressure)
-    plt.xlabel(r'$r$')
-    plt.ylabel(r'pressure')
-
-    # Plot
-    plt.rcParams.update({'font.size': 16})
-    plt.rcParams['axes.linewidth']=3
-
-    plt.figure(figsize = (12,7))
-    plt.plot(r,dp_dr)
-    plt.xlabel(r'$r$')
-    plt.ylabel(r'dp_dr')
 
     u_grid = compute_u_velocity(params, r, z, field_vars, h)
     integral_u_r = np.trapz(r[:, None] * u_grid, dx=params.dz, axis=1)
     grad_u_r = as_grad(integral_u_r, params.dr)
+    radial_term = (-1 / r) * grad_u_r
+    dh_dt = radial_term + params.w_e
 
-    # Plot
-    plt.rcParams.update({'font.size': 16})
-    plt.rcParams['axes.linewidth']=3
+    # plt.plot(h / np.max(np.abs(h)), label="h")
+    plt.plot(h, label="h")
+    # plt.plot(dh_dr / np.max(np.abs(dh_dr)), label="dh/dr")
+    plt.plot(dh_dr, label="dh/dr")
+    plt.legend()
+    plt.show()
 
-    plt.figure(figsize = (12,7))
-    plt.plot(r,integral_u_r)
-    plt.xlabel(r'$r$')
-    plt.ylabel(r'integral_u_r')
+    plt.plot(curvature_term / np.max(np.abs(curvature_term)), label="curvature")
+    plt.plot(d_curvature_dr / np.max(np.abs(d_curvature_dr)), label="d curvature / dr")
+    plt.legend()
+    plt.show()
 
-    # Plot
-    plt.rcParams.update({'font.size': 16})
-    plt.rcParams['axes.linewidth']=3
+    plt.plot(pressure / np.max(np.abs(pressure)), label="pressure")
+    plt.plot(dp_dr / np.max(np.abs(dp_dr)), label="dp/dr")
+    plt.title(
+        f"p max: {np.max(np.abs(pressure))}, std: {np.std(pressure)}, \n pgrad max: {np.max(np.abs(dp_dr))}"
+    )
+    plt.legend()
+    plt.show()
 
-    plt.figure(figsize = (12,7))
-    plt.plot(r,grad_u_r)
-    plt.xlabel(r'$r$')
-    plt.ylabel(r'grad_u_r')
+    plt.plot(integral_u_r / np.max(np.abs(integral_u_r)), label="integral_u_r")
+    plt.plot(grad_u_r / np.max(np.abs(grad_u_r)), label="grad_u_r")
+    plt.legend()
+    plt.show()
+
+    plt.plot(radial_term, label="radial_term")
+    plt.legend()
+    plt.show()
+
+    plt.plot(dh_dt, label="dh_dt")
+    plt.legend()
+    plt.show()
+
+    plt.plot(h, label="h")
+    plt.plot(h + params.dt * dh_dt, label="h_t+1")
+    plt.legend()
+    plt.show()
+
+
+def plot_velocity(params, r, z, field_vars, h):
+    field_vars.u_grid = compute_u_velocity(params, r, z, field_vars, h)
+    field_vars.w_grid = compute_w_velocity(params, r, z, field_vars, h)
 
     plt.figure(figsize=(10, 6))
     plt.imshow(
@@ -351,39 +300,66 @@ def run():
     plt.legend()
     plt.show()
 
-    radial_term = (-1 / r) * grad_u_r
-    dh_dt = radial_term + params.w_e
-
-    # Plot
-    plt.rcParams.update({'font.size': 16})
-    plt.rcParams['axes.linewidth']=3
-
-    plt.figure(figsize = (12,7))
-    plt.plot(r,radial_term)
-    plt.xlabel(r'$r$')
-    plt.ylabel(r'radial_term')
-
-    # Plot
-    plt.rcParams.update({'font.size': 16})
-    plt.rcParams['axes.linewidth']=3
-
-    plt.figure(figsize = (12,7))
-    plt.plot(r,dh_dt)
-    plt.xlabel(r'$r$')
-    plt.ylabel(r'dh_dt')
-
-    h_profiles = eval(params, r, z, field_vars, h.copy())
-
+    # Plot vertical velocity (w) with height profile overlay
     plt.figure(figsize=(10, 6))
-    for i, h_t in enumerate(h_profiles[::50]):
-        plt.plot(r * 1e-3, h_t * 1e-3, c="dimgrey")
-    plt.plot(r * 1e-3, h_profiles[0] * 1e-3, c="k", label="h0")
-    plt.plot(r * 1e-3, h_profiles[-1] * 1e-3, c="r", label="Final")
-    plt.xlabel("Radius (mm)")
-    plt.ylabel("Height (mm)")
+    plt.imshow(
+        field_vars.w_grid.T,
+        aspect="auto",
+        origin="lower",
+        extent=[-params.r_c, params.r_c, 0, np.max(z)],
+        cmap="viridis",
+    )
+    plt.plot(
+        r, h, color="red", linewidth=2, label="Height profile $h(r)$"
+    )  # Overlay height profile
+    plt.xlabel("Radius (m)")
+    plt.ylabel("Height (m)")
+    plt.colorbar(label="Vertical velocity $w(r, z)$")
+    plt.title("Vertical Velocity Field and Height Profile")
     plt.legend()
-    plt.title("Evolution of Droplet Height Profile Over Time")
     plt.show()
+
+
+def run():
+    # Define the simulation parameters
+    params = SimulationParams(
+        r_c=1e-3,  # Radius of the droplet in meters
+        hmax0=3e-4,  # Initial droplet height at the center in meters
+        Nr=399,  # Number of radial points
+        Nz=111,  # Number of z-axis points
+        Nt=100,  # Number of time steps
+        dr= 2.0 * 1e-3 / 399,  # Radial grid spacing
+        dz=3e-4 / 111,  # Vertical grid spacing
+        dt=1e-3,  # Time step size eg 1e-5
+        rho=1,  # Density of the liquid (kg/m^3) eg 1
+        w_e=-1e-3, # -1e-3,  # Constant evaporation rate (m/s) eg 1e-4
+        sigma=0.072,  # Surface tension (N/m) eg 0.072
+        eta=1e-3,  # Viscosity (Pa*s) eg 1e-3
+        d_sigma_dr=0.0,  # Surface tension gradient
+
+        A = 8.07131, # Antoine Equation (-)
+        B = 1730.63, # Antoine Equation (-)
+        C = 233.4, # Antoine Equation (-)
+        D = 2.42e-5, # Diffusivity of H2O in Air (m^2/s)
+        Mw = 0.018, # Molecular weight H2O vapor (kg/mol)
+        Rs = 8.314, # Gas Constant (J/(K*mol))
+        T = 293.15, # Ambient Temperature (K)
+        RH = 0.20, # Relative Humidity (-)
+    )
+
+    # Initialize the grids and field variables
+    r, z, field_vars = setup_grids(params)
+
+    # run simulation and plot final profile
+    h_0 = setup_parabolic_initial_h_profile(
+        r, params.hmax0, params.r_c
+    )
+    h_profiles = eval(params, r, z, field_vars, h_0.copy())
+
+    # plot the velocity profile and
+    inspect(params, r, z, field_vars, h_profiles[-1])
+    plot_velocity(params, r, z, field_vars, h_profiles[-1])
+
 
 if __name__ == "__main__":
     run()
