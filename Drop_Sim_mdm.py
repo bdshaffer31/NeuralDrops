@@ -76,7 +76,7 @@ def setup_cap_initial_h_profile(r, h0, r_c):
 
     return h
 
-def setup_parabolic_initial_h_profile(r, h0, r_c, drop_fraction=1.0, order=2):
+def setup_parabolic_initial_h_profile(r, h0, r_c, drop_fraction=1.0, order=4):
     # setup up a polynomial initial drop profile
     drop_fraction = 1.0  # percent of r taken up with drop (vs 0)
     h = np.zeros_like(r)
@@ -107,10 +107,10 @@ def calc_pressure(params, r, z, field_vars, h):
     h_star = params.hmax0/100
     n = 3
     m = 2
-    theta_e = 2*np.arctan(params.hmax0/params.r_c)/np.pi*180
+    theta_e = 2*np.arctan(params.hmax0/params.r_c)
     dis_press = -params.sigma*np.square(theta_e)*(n-1)*(m-1)/(n-m)/(2*h_star)*((h_star/params.hmax0)**n-(h_star/params.hmax0)**m)
 
-    pressure = Laplace_pressure + dis_press
+    pressure = Laplace_pressure #+ dis_press
     return pressure
 
 def calc_curvature_v2(params, r, z, field_vars, h):
@@ -174,7 +174,7 @@ def calculate_dh_dt(t, params, r, z, field_vars, h):
     u_grid = compute_u_velocity(params, r, z, field_vars, h)
 
     # Integrate r * u over z from 0 to h for each radial position
-    integral_u_r = np.trapz(r[:, None] * u_grid, dx=params.dz, axis=1)
+    integral_u_r = np.trapz(r[:, None] * u_grid, dx=params.dz, axis=1) + 1.0e-8
     # TODO scaling??
     integral_u_r *= params.dz
     grad_u_r = as_grad(integral_u_r, params.dr)
@@ -209,7 +209,7 @@ def run_forward_euler_simulation(params, r, z, field_vars, h0):
 def plot_height_profile_evolution(r, h_profiles, params, n_lines=5):
     """Plot the evolution of the height profile over time."""
     plt.figure(figsize=(10, 6))
-    for i, h_t in enumerate(h_profiles[::50]):
+    for i, h_t in enumerate(h_profiles[::20]):
         plt.plot(r * 1e-3, h_t * 1e-3, c="dimgrey")
     plt.plot(r * 1e-3, h_profiles[0] * 1e-3, c="k", label="h0")
     plt.plot(r * 1e-3, h_profiles[-1] * 1e-3, c="r", label="Final")
@@ -234,33 +234,48 @@ def inspect(params, r, z, field_vars, h):
     dp_dr = as_grad(pressure, params.dr)
 
     u_grid = compute_u_velocity(params, r, z, field_vars, h)
-    integral_u_r = np.trapz(r[:, None] * u_grid, dx=params.dz, axis=1)
+    integral_u_r = np.trapz(r[:, None] * u_grid, dx=params.dz, axis=1) +1.0e-8
     grad_u_r = as_grad(integral_u_r, params.dr)
     radial_term = (-1 / r) * grad_u_r
     dh_dt = radial_term + params.w_e
 
     # plt.plot(h / np.max(np.abs(h)), label="h")
     plt.plot(h, label="h")
+    plt.legend()
+    plt.show()
+
     # plt.plot(dh_dr / np.max(np.abs(dh_dr)), label="dh/dr")
     plt.plot(dh_dr, label="dh/dr")
     plt.legend()
     plt.show()
 
-    plt.plot(curvature_term / np.max(np.abs(curvature_term)), label="curvature")
-    plt.plot(d_curvature_dr / np.max(np.abs(d_curvature_dr)), label="d curvature / dr")
+    plt.plot(curvature_term, label="curvature")
     plt.legend()
     plt.show()
 
-    plt.plot(pressure / np.max(np.abs(pressure)), label="pressure")
-    plt.plot(dp_dr / np.max(np.abs(dp_dr)), label="dp/dr")
+    plt.plot(d_curvature_dr, label="d curvature / dr")
+    plt.legend()
+    plt.show()
+
+    plt.plot(pressure, label="pressure")
+    plt.title(
+        f"p max: {np.max(np.abs(pressure))}, std: {np.std(pressure)}"
+    )
+    plt.legend()
+    plt.show()
+
+    plt.plot(dp_dr, label="dp/dr")
     plt.title(
         f"p max: {np.max(np.abs(pressure))}, std: {np.std(pressure)}, \n pgrad max: {np.max(np.abs(dp_dr))}"
     )
     plt.legend()
     plt.show()
 
-    plt.plot(integral_u_r / np.max(np.abs(integral_u_r)), label="integral_u_r")
-    plt.plot(grad_u_r / np.max(np.abs(grad_u_r)), label="grad_u_r")
+    plt.plot(integral_u_r, label="integral_u_r")
+    plt.legend()
+    plt.show()
+
+    plt.plot(grad_u_r, label="grad_u_r")
     plt.legend()
     plt.show()
 
@@ -325,12 +340,12 @@ def run():
     params = SimulationParams(
         r_c=1e-3,  # Radius of the droplet in meters
         hmax0=3e-4,  # Initial droplet height at the center in meters
-        Nr=399,  # Number of radial points
+        Nr=699,  # Number of radial points
         Nz=111,  # Number of z-axis points
         Nt=100,  # Number of time steps
-        dr= 2.0 * 1e-3 / 399,  # Radial grid spacing
+        dr= 2.0 * 1e-3 / 699,  # Radial grid spacing
         dz=3e-4 / 111,  # Vertical grid spacing
-        dt=1e-3,  # Time step size eg 1e-5
+        dt=2e-4,  # Time step size eg 1e-5
         rho=1,  # Density of the liquid (kg/m^3) eg 1
         w_e=-1e-3, # -1e-3,  # Constant evaporation rate (m/s) eg 1e-4
         sigma=0.072,  # Surface tension (N/m) eg 0.072
@@ -351,7 +366,7 @@ def run():
     r, z, field_vars = setup_grids(params)
 
     # run simulation and plot final profile
-    h_0 = setup_parabolic_initial_h_profile(
+    h_0 = setup_cap_initial_h_profile(
         r, params.hmax0, params.r_c
     )
     h_profiles = eval(params, r, z, field_vars, h_0.copy())
