@@ -7,6 +7,7 @@ import networks
 import visualize
 import logger
 import load_data
+import utils
 
 
 def validate_node_model(model, time_steps, val_loader, loss_fn):
@@ -77,7 +78,8 @@ def load_fno_model_from_logger(log_loader):
     )
     ode_func = networks.FNOFluxODEWrapper(fno_model)
     # model = networks.NeuralODE(ode_func, config.get("solver"))
-    model = networks.ForwardEuler(ode_func)
+    # model = networks.ForwardEuler(ode_func)
+    model = networks.FNOFluxODESolver(ode_func, solver_type=config["solver"])
 
     # Load the best validation model
     best_model_path = log_loader.get_relpath("best_model.pth")
@@ -86,6 +88,7 @@ def load_fno_model_from_logger(log_loader):
 
     return model
 
+
 def run_training(config, run_dir):
     exp_logger = logger.ExperimentLogger(run_dir=run_dir, use_timestamp=False)
 
@@ -93,7 +96,9 @@ def run_training(config, run_dir):
     train_loader, val_loader, dataset = data
 
     # Initialize ODE model, loss function, and optimizer
-    train_time_steps, initial_condition, conditioning, target_snapshots = next(iter(train_loader))
+    train_time_steps, initial_condition, conditioning, target_snapshots = next(
+        iter(train_loader)
+    )
     grid_size = initial_condition.shape[1]
     conditioning_dim = conditioning.shape[1]
     input_dim = 1 + conditioning_dim  # h_0 + conditioning variables
@@ -117,8 +122,8 @@ def run_training(config, run_dir):
     )
     ode_func = networks.FNOFluxODEWrapper(fno_model)
     # model = networks.NeuralODE(ode_func, solver=config["solver"])
-    model = networks.ForwardEuler(ode_func)
-
+    # model = networks.ForwardEuler(ode_func)
+    model = networks.FNOFluxODESolver(ode_func, solver_type=config["solver"])
 
     exp_logger.log_config(config)
 
@@ -152,23 +157,25 @@ def main(train=False):
         "num_fc_layers": 4,
         "fc_width": 256,
         "activation_fn": "relu",
-        "solver": "rk4",
+        "solver": "euler",
         # data params
         "data_dir": "data",
         "batch_size": 32,
-        "exp_nums": [10,15,18,9,6,8,48,47], #None,  # [19, 22, 23, 27],  # if None use all, otherwise give a list of ints
+        "exp_nums": utils.good_run_numbers()[:1],  # if None use all, otherwise give a list of ints
         "valid_solutes": None,  # if None keep all solutes, otherwise give a list of strings
         "valid_substrates": None,  # if None keep all substrates, otherwise give a list of strings
         "valid_temps": None,  # if None keep all substrates, otherwise give a list of floats
         "temporal_subsample": 15,  # temporal subsampling on profile data
         "spatial_subsample": 5,
+        "temporal_pad": 128,
+        "axis_symmetric": True, # split along x axis
         "use_log_transform": False,
-        "traj_len": 32,
+        "traj_len": 4,
         "val_ratio": 0.1,
     }
     torch.manual_seed(config["manual_seed"])
 
-    run_dir = "run_fno_flux"
+    run_dir = "run_fno_flux_axis_symmetric"
     if train:
         run_training(config, run_dir)
     visualize.viz_results(run_dir)

@@ -25,20 +25,39 @@ def load_contents(data_dir, file):
     return contents_dict
 
 
+# def load_profile_from_contents(
+#     contents_data, end_pad=64, temporal_subsample=10, spatial_subsample=1
+# ):
+#     np_profile = contents_data["profile"]
+#     np_profile = np.array(np_profile, dtype="float32")
+#     profile = torch.tensor(np_profile, dtype=torch.float32)
+#     # apply detrending, centering, padding here
+#     profile, _ = utils.detrend_dataset(profile, last_n=50, window_size=50)
+#     profile = utils.center_data(profile)
+#     profile = utils.pad_profile(profile, end_pad * temporal_subsample)
+#     profile = utils.smooth_profile(profile)
+#     profile = utils.vertical_crop_profile(profile, 0.78)
+
+#     profile = profile[::temporal_subsample, ::spatial_subsample]
+#     return profile
+
 def load_profile_from_contents(
-    contents_data, end_pad=64, temporal_subsample=10, spatial_subsample=1
-):
+        contents_data, end_pad=64, temporal_subsample=10, spatial_subsample=1
+    ):
+    # put all preprocessing to load profile data here
+    # leaving as individual
     np_profile = contents_data["profile"]
     np_profile = np.array(np_profile, dtype="float32")
     profile = torch.tensor(np_profile, dtype=torch.float32)
     # apply detrending, centering, padding here
     profile, _ = utils.detrend_dataset(profile, last_n=50, window_size=50)
-    profile = utils.center_data(profile)
-    profile = utils.pad_profile(profile, end_pad * temporal_subsample)
     profile = utils.smooth_profile(profile)
+    profile = utils.pad_profile(profile, end_pad * temporal_subsample)
     profile = utils.vertical_crop_profile(profile, 0.78)
+    profile = utils.center_data(profile)
+    profile = utils.central_split_data(profile)
 
-    profile = profile[::temporal_subsample, ::spatial_subsample]
+    profile = profile[:: temporal_subsample, :: spatial_subsample]
     return profile
 
 
@@ -82,7 +101,7 @@ if __name__ == "__main__":
     #     contents = load_contents(data_dir, file)
     #     print(file, contents["profile"].shape)
 
-    exp_logger = logger.ExperimentLogger(run_dir="data_test_viz", use_timestamp=False)
+    exp_logger = logger.ExperimentLogger(run_dir="data_test_viz2", use_timestamp=False)
     for file in files:
         print(file)
         profile = load_profile(data_dir, file)
