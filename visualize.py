@@ -33,6 +33,7 @@ def node_traj_pred_from_dataset(model, dataset, run_name, t_0_idx=1):
         pred_traj = model(initial_state, conditioning, time_steps).squeeze()
         return pred_traj
 
+
 def flux_fno_traj_pred_from_dataset(model, dataset, run_name, t_0_idx=1):
     with torch.no_grad():
         conditioning = dataset.get_conditioning(run_name).unsqueeze(0)
