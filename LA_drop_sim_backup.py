@@ -73,16 +73,22 @@ def setup_cap_initial_h_profile(r, h0, r_c):
 
     return h
 
-# def as_grad(x, dx):
-#     """Axis symmetric gradient (left side neumann boundary condition)"""
-#     x_padded = np.pad(x, (1, 0), mode="edge")
-#     grad_x = np.gradient(x_padded, dx, edge_order=2)
-#     return grad_x[1:]
 
 def as_grad(x, dx):
     """Axis symmetric gradient (left side neumann boundary condition)"""
-    return np.gradient(x, dx, edge_order=2)
+    x_padded = np.pad(x, (1, 0), mode="edge")
+    grad_x = np.gradient(x_padded, dx, edge_order=2)
+    return grad_x[1:]
 
+# def as_grad(x, dx):
+#     """Axis symmetric gradient (left side neumann boundary condition)"""
+#     grad_x = np.gradient(x, dx, edge_order=2)
+#     return grad_x
+
+def central_diff_4th_order(x, dx):
+    kernel = np.array([-1, 8, 0, -8, 1]) / (12 * dx)
+    derivative = np.convolve(x, kernel, mode="same")
+    return derivative
 
 def calc_curvature(params, r, z, field_vars, h):
     dh_dr = as_grad(h, params.dr)
@@ -117,7 +123,7 @@ def calc_pressure_v2(params, r, z, field_vars, h):
 def compute_u_velocity(params, r, z, field_vars, h):
     """Compute radial velocity u(r, z, t) using the given equation."""
     u_grid = np.zeros_like(field_vars.u_grid)
-    pressure = calc_pressure_v2(params, r, z, field_vars, h)
+    pressure = calc_pressure(params, r, z, field_vars, h)
     dp_dr = as_grad(pressure, params.dr)
     for i in range(len(r)):
         h_r = h[i]
@@ -185,9 +191,17 @@ def calculate_dh_dt(t, params, r, z, field_vars, h):
 
     # Calculate dh/dt as radial term plus evaporation rate
     radial_term = (-1 / r) * grad_u_r
+    # TODO bcs
+    # radial_term[0] = radial_term[3]
+    # radial_term[1] = radial_term[3]
+    # radial_term[2] = radial_term[3]
+    radial_term = infill_first_three_values(radial_term, 2)
+    # TODO negative sign
     dh_dt = radial_term + params.w_e
+    # dh_dt = -1 * radial_term + params.w_e
 
     return dh_dt
+
 
 
 def run_forward_euler_simulation(params, r, z, field_vars, h0):
@@ -254,9 +268,9 @@ def inspect(params, r, z, field_vars, h):
     integral_u_r = np.trapz(r[:, None] * u_grid, dx=params.dz, axis=1)
     grad_u_r = as_grad(integral_u_r, params.dr)
     radial_term = (-1 / r) * grad_u_r
-    # radial_term[0] = radial_term[3]
-    # radial_term[1] = radial_term[3]
-    # radial_term[2] = radial_term[3]
+    radial_term[0] = radial_term[3]
+    radial_term[1] = radial_term[3]
+    radial_term[2] = radial_term[3]
     dh_dt = radial_term + params.w_e
 
     # plt.plot(h / np.max(np.abs(h)), label="h")
@@ -363,15 +377,13 @@ def run():
 
     # run simulation and plot final profile
     h_0 = setup_parabolic_initial_h_profile(
-        r, params.hmax0*0.5, params.r_c, drop_fraction=1.0, order=4
+        r, params.hmax0, params.r_c, drop_fraction=1.0, order=4
     )
     h_profiles = eval(params, r, z, field_vars, h_0.copy())
 
     # plot the velocity profile and
-    inspect(params, r, z, field_vars, h_profiles[1].copy())
-    plot_velocity(params, r, z, field_vars, h_profiles[1].copy())
-    inspect(params, r, z, field_vars, h_profiles[0].copy())
-    plot_velocity(params, r, z, field_vars, h_profiles[0].copy())
+    inspect(params, r, z, field_vars, h_profiles[-1].copy())
+    plot_velocity(params, r, z, field_vars, h_profiles[-1].copy())
 
 
 if __name__ == "__main__":
