@@ -148,6 +148,8 @@ class ProfileDataset(Dataset):
         valid_temps=None,
         temporal_subsample=1,
         spatial_subsample=1,
+        axis_symmetric=True,
+        temporal_pad=64,
         dtype=torch.float32,
         use_log_transform=True,
         framerate=1 / 20,
@@ -166,6 +168,8 @@ class ProfileDataset(Dataset):
         self.valid_temps = valid_temps
         self.temporal_subsample = temporal_subsample
         self.spatial_subsample = spatial_subsample
+        self.axis_symmetric = axis_symmetric
+        self.temporal_pad = temporal_pad
         self.dtype = dtype
         self.use_log_transform = use_log_transform
         self.framerate = framerate
@@ -284,10 +288,13 @@ class ProfileDataset(Dataset):
         profile = torch.tensor(np_profile, dtype=torch.float32)
         # apply detrending, centering, padding here
         profile, _ = utils.detrend_dataset(profile, last_n=50, window_size=50)
-        profile = utils.pad_profile(profile, 64 * self.temporal_subsample)
         profile = utils.smooth_profile(profile)
+        profile = utils.pad_profile(profile, self.temporal_pad * self.temporal_subsample)
         profile = utils.vertical_crop_profile(profile, 0.78)
         profile = utils.center_data(profile)
+        # if we want the axis symmetric data (half of the profile only)
+        if self.axis_symmetric:
+            profile = utils.central_split_data(profile)
 
         profile = profile[:: self.temporal_subsample, :: self.spatial_subsample]
         return profile
@@ -359,7 +366,9 @@ class NODEDataset(Dataset):
                 target_snapshots = profile[t + 1 : t + 1 + self.traj_len]
                 conditioning = self.profile_data.get_conditioning(file)
                 time_steps = self.time_steps
-                samples.append((time_steps, initial_condition, conditioning, target_snapshots))
+                samples.append(
+                    (time_steps, initial_condition, conditioning, target_snapshots)
+                )
         return samples
 
     def get_time_steps(self):
@@ -472,6 +481,8 @@ def setup_data(config):
         valid_temps=config["valid_temps"],
         temporal_subsample=config["temporal_subsample"],
         spatial_subsample=config["spatial_subsample"],
+        axis_symmetric=config["axis_symmetric"],
+        temporal_pad=config["temporal_pad"],
         dtype=torch.float32,
         use_log_transform=config["use_log_transform"],
     )
