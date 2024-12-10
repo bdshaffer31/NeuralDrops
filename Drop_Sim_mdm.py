@@ -47,31 +47,6 @@ class SimulationParams:
     T: float #Temperature of drop exterior
     RH: float #Relative Humidity
 
-params = SimulationParams(
-        r_c=1e-3,  # Radius of the droplet in meters
-        hmax0=3e-4,  # Initial droplet height at the center in meters
-        Nr=399,  # Number of radial points
-        Nz=111,  # Number of z-axis points
-        Nt=300,  # Number of time steps
-        dr=2.0 * 1e-3 / (399),  # Radial grid spacing
-        dz=5e-4 / (111),  # Vertical grid spacing
-        dt=1e-3,  # Time step size eg 1e-5
-        rho=1,  # Density of the liquid (kg/m^3) eg 1
-        w_e=-1e-3, # -1e-3,  # Constant evaporation rate (m/s) eg 1e-4
-        sigma=0.072,  # Surface tension (N/m) eg 0.072
-        eta=1e-3,  # Viscosity (Pa*s) eg 1e-3
-        d_sigma_dr=0.0,  # Surface tension gradient
-
-        A = 8.07131, # Antoine Equation (-)
-        B = 1730.63, # Antoine Equation (-)
-        C = 233.4, # Antoine Equation (-)
-        D = 2.42e-5, # Diffusivity of H2O in Air (m^2/s)
-        Mw = 0.018, # Molecular weight H2O vapor (kg/mol)
-        Rs = 8.314, # Gas Constant (J/(K*mol))
-        T = 293.15, # Ambient Temperature (K)
-        RH = 0.20, # Relative Humidity (-)
-    )
-
 def setup_grids(params: SimulationParams):
     """Set up the grid arrays and initial field values."""
     # Radial and vertical grids
@@ -93,9 +68,6 @@ def setup_grids(params: SimulationParams):
 
     return r, z, field_vars
 
-# Initialize the grids and field variables
-r, z, field_vars = setup_grids(params)
-
 def setup_cap_initial_h_profile(r, h0, r_c):
     # setup a spherical cap initial height profile
     R = (r_c**2 + h0**2) / (2 * h0)
@@ -114,78 +86,10 @@ def setup_parabolic_initial_h_profile(r, h0, r_c, drop_fraction=1.0, order=2):
     )
     return h
 
-h = setup_cap_initial_h_profile(r, params.hmax0, params.r_c)
-
-# Plot
-plt.rcParams.update({'font.size': 16})
-plt.rcParams['axes.linewidth']=3
-
-plt.figure(figsize = (12,7))
-plt.plot(r,h)
-plt.xlabel(r'$r$')
-plt.ylabel(r'$d2hdr2(r)$')
-
-#def as_grad(x, dx):
-    #"""Axis symmetric gradient (left side neumann boundary condition)"""
-    #x_padded = np.pad(x, (1, 0), mode="edge")
-    #grad_x = np.gradient(x_padded, dx, edge_order=2)
-    #return grad_x[1:]
-
 def as_grad(x, dx):
     """Axis symmetric gradient (left side neumann boundary condition)"""
     grad_x = np.gradient(x, dx, edge_order=2)
     return grad_x
-
-#print(params.dr)
-#print(r)
-
-dh_dr = as_grad(h, params.dr)
-d2h_dr2 = as_grad(dh_dr, params.dr)
-
-R_large = (params.r_c**2+params.hmax0**2)/(2*params.hmax0)
-dh_dr_2 = (-r)/ np.sqrt((2.0*R_large*(r+R_large)-np.square(r+R_large)))
-d2h_dr2_2 = -np.square(R_large) / np.sqrt(np.square(R_large)-np.square(r))**3
-
-# Plot
-plt.rcParams.update({'font.size': 16})
-plt.rcParams['axes.linewidth']=3
-
-plt.figure(figsize = (12,7))
-plt.plot(r,dh_dr)
-plt.plot(r,dh_dr_2)
-plt.xlabel(r'$r$')
-plt.ylabel(r'$d2hdr2(r)$')
-
-# Plot
-plt.rcParams.update({'font.size': 16})
-plt.rcParams['axes.linewidth']=3
-
-plt.figure(figsize = (12,7))
-plt.plot(r,d2h_dr2)
-plt.plot(r,d2h_dr2_2)
-plt.xlabel(r'$r$')
-plt.ylabel(r'$d2hdr2(r)$')
-
-curvature_term = (r * dh_dr) / np.sqrt(1 + dh_dr**2)
-d_curvature_dr = as_grad(curvature_term, params.dr)
-
-# Plot
-plt.rcParams.update({'font.size': 16})
-plt.rcParams['axes.linewidth']=3
-
-plt.figure(figsize = (12,7))
-plt.plot(r,curvature_term)
-plt.xlabel(r'$r$')
-plt.ylabel(r'curvature_term')
-
-# Plot
-plt.rcParams.update({'font.size': 16})
-plt.rcParams['axes.linewidth']=3
-
-plt.figure(figsize = (12,7))
-plt.plot(r,d_curvature_dr)
-plt.xlabel(r'$r$')
-plt.ylabel(r'd_curvature_dr')
 
 def calc_curvature(params, r, z, field_vars, h):
     dh_dr = as_grad(h, params.dr)
@@ -221,27 +125,6 @@ def calc_pressure_v2(params, r, z, field_vars, h):
     pressure = curvature_term * params.sigma * 2
     return pressure
 
-pressure = calc_pressure(params, r, z, field_vars, h)
-dp_dr = as_grad(pressure, params.dr)
-
-# Plot
-plt.rcParams.update({'font.size': 16})
-plt.rcParams['axes.linewidth']=3
-
-plt.figure(figsize = (12,7))
-plt.plot(r,pressure)
-plt.xlabel(r'$r$')
-plt.ylabel(r'pressure')
-
-# Plot
-plt.rcParams.update({'font.size': 16})
-plt.rcParams['axes.linewidth']=3
-
-plt.figure(figsize = (12,7))
-plt.plot(r,dp_dr)
-plt.xlabel(r'$r$')
-plt.ylabel(r'dp_dr')
-
 def interp_h_mask_grid(grid_data, h, z):
     dz = z[1] - z[0]
     masked_grid = np.array(grid_data)
@@ -271,67 +154,6 @@ def compute_u_velocity(params, r, z, field_vars, h):
     u_grid = interp_h_mask_grid(u_grid, h, z)
 
     return u_grid
-
-u_grid = compute_u_velocity(params, r, z, field_vars, h)
-integral_u_r = np.trapz(r[:, None] * u_grid, dx=params.dz, axis=1)
-grad_u_r = as_grad(integral_u_r, params.dr)
-
-# Plot
-plt.rcParams.update({'font.size': 16})
-plt.rcParams['axes.linewidth']=3
-
-plt.figure(figsize = (12,7))
-plt.plot(r,integral_u_r)
-plt.xlabel(r'$r$')
-plt.ylabel(r'integral_u_r')
-
-# Plot
-plt.rcParams.update({'font.size': 16})
-plt.rcParams['axes.linewidth']=3
-
-plt.figure(figsize = (12,7))
-plt.plot(r,grad_u_r)
-plt.xlabel(r'$r$')
-plt.ylabel(r'grad_u_r')
-
-plt.figure(figsize=(10, 6))
-plt.imshow(
-    field_vars.u_grid.T,
-    aspect="auto",
-    origin="lower",
-    extent=[-params.r_c, params.r_c, 0, np.max(z)],
-    cmap="viridis",
-)
-plt.plot(
-    r, h, color="red", linewidth=2, label="Height profile $h(r)$"
-)  # Overlay height profile
-plt.xlabel("Radius (m)")
-plt.ylabel("Height (m)")
-plt.colorbar(label="Radial velocity $u(r, z)$")
-plt.title("Radial Velocity Field and Height Profile")
-plt.legend()
-plt.show()
-
-radial_term = (-1 / r) * grad_u_r
-dh_dt = radial_term + params.w_e
-
-# Plot
-plt.rcParams.update({'font.size': 16})
-plt.rcParams['axes.linewidth']=3
-
-plt.figure(figsize = (12,7))
-plt.plot(r,radial_term)
-plt.xlabel(r'$r$')
-plt.ylabel(r'radial_term')
-
-# Plot
-plt.rcParams.update({'font.size': 16})
-plt.rcParams['axes.linewidth']=3
-
-plt.figure(figsize = (12,7))
-plt.plot(r,dh_dt)
-plt.xlabel(r'$r$')
-plt.ylabel(r'dh_dt')
 
 def calculate_dh_dt(t, params, r, z, field_vars, h):
     """Calculate dh/dt from u velocities for integration with solve_ivp"""
@@ -377,15 +199,191 @@ def eval(params, r, z, field_vars, h0):
     h_profiles = run_forward_euler_simulation(params, r, z, field_vars, h0)
     return h_profiles
 
-h_profiles = eval(params, r, z, field_vars, h.copy())
+def run():
+    params = SimulationParams(
+        r_c=1e-3,  # Radius of the droplet in meters
+        hmax0=5e-4,  # Initial droplet height at the center in meters
+        Nr=399,  # Number of radial points
+        Nz=111,  # Number of z-axis points
+        Nt=100,  # Number of time steps
+        dr=2.0 * 1e-3 / (399),  # Radial grid spacing
+        dz=5e-4 / (111),  # Vertical grid spacing
+        dt=1e-4,  # Time step size                         Largest tested: 1e-3
+        rho=1,  # Density of the liquid (kg/m^3) eg 1
+        w_e=0.0, # -1e-3,  # Constant evaporation rate (m/s) eg 1e-4
+        sigma=0.072,  # Surface tension (N/m) eg 0.072
+        eta=1e-3,  # Viscosity (Pa*s) eg 1e-3
+        d_sigma_dr=0.0,  # Surface tension gradient
 
-plt.figure(figsize=(10, 6))
-for i, h_t in enumerate(h_profiles[::50]):
-    plt.plot(r * 1e-3, h_t * 1e-3, c="dimgrey")
-plt.plot(r * 1e-3, h_profiles[0] * 1e-3, c="k", label="h0")
-plt.plot(r * 1e-3, h_profiles[-1] * 1e-3, c="r", label="Final")
-plt.xlabel("Radius (mm)")
-plt.ylabel("Height (mm)")
-plt.legend()
-plt.title("Evolution of Droplet Height Profile Over Time")
-plt.show()
+        A = 8.07131, # Antoine Equation (-)
+        B = 1730.63, # Antoine Equation (-)
+        C = 233.4, # Antoine Equation (-)
+        D = 2.42e-5, # Diffusivity of H2O in Air (m^2/s)
+        Mw = 0.018, # Molecular weight H2O vapor (kg/mol)
+        Rs = 8.314, # Gas Constant (J/(K*mol))
+        T = 293.15, # Ambient Temperature (K)
+        RH = 0.20, # Relative Humidity (-)
+    )
+
+    # Initialize the grids and field variables
+    r, z, field_vars = setup_grids(params)
+
+    h = setup_parabolic_initial_h_profile(r, params.hmax0, params.r_c)
+
+    # Plot
+    plt.rcParams.update({'font.size': 16})
+    plt.rcParams['axes.linewidth']=3
+
+    plt.figure(figsize = (12,7))
+    plt.plot(r,h)
+    plt.xlabel(r'$r$')
+    plt.ylabel(r'$h(r)$')
+
+    #print(params.dr)
+    #print(r)
+
+    dh_dr = as_grad(h, params.dr)
+    d2h_dr2 = as_grad(dh_dr, params.dr)
+
+    R_large = (params.r_c**2+params.hmax0**2)/(2*params.hmax0)
+    dh_dr_2 = (-r)/ np.sqrt((2.0*R_large*(r+R_large)-np.square(r+R_large)))
+    d2h_dr2_2 = -np.square(R_large) / np.sqrt(np.square(R_large)-np.square(r))**3
+
+    # Plot
+    plt.rcParams.update({'font.size': 16})
+    plt.rcParams['axes.linewidth']=3
+
+    plt.figure(figsize = (12,7))
+    plt.plot(r,dh_dr)
+    plt.plot(r,dh_dr_2)
+    plt.xlabel(r'$r$')
+    plt.ylabel(r'$d2hdr2(r)$')
+
+    # Plot
+    plt.rcParams.update({'font.size': 16})
+    plt.rcParams['axes.linewidth']=3
+
+    plt.figure(figsize = (12,7))
+    plt.plot(r,d2h_dr2)
+    plt.plot(r,d2h_dr2_2)
+    plt.xlabel(r'$r$')
+    plt.ylabel(r'$d2hdr2(r)$')
+
+    curvature_term = (r * dh_dr) / np.sqrt(1 + dh_dr**2)
+    d_curvature_dr = as_grad(curvature_term, params.dr)
+
+    # Plot
+    plt.rcParams.update({'font.size': 16})
+    plt.rcParams['axes.linewidth']=3
+
+    plt.figure(figsize = (12,7))
+    plt.plot(r,curvature_term)
+    plt.xlabel(r'$r$')
+    plt.ylabel(r'curvature_term')
+
+    # Plot
+    plt.rcParams.update({'font.size': 16})
+    plt.rcParams['axes.linewidth']=3
+
+    plt.figure(figsize = (12,7))
+    plt.plot(r,d_curvature_dr)
+    plt.xlabel(r'$r$')
+    plt.ylabel(r'd_curvature_dr')
+
+    pressure = calc_pressure(params, r, z, field_vars, h)
+    dp_dr = as_grad(pressure, params.dr)
+
+    # Plot
+    plt.rcParams.update({'font.size': 16})
+    plt.rcParams['axes.linewidth']=3
+
+    plt.figure(figsize = (12,7))
+    plt.plot(r,pressure)
+    plt.xlabel(r'$r$')
+    plt.ylabel(r'pressure')
+
+    # Plot
+    plt.rcParams.update({'font.size': 16})
+    plt.rcParams['axes.linewidth']=3
+
+    plt.figure(figsize = (12,7))
+    plt.plot(r,dp_dr)
+    plt.xlabel(r'$r$')
+    plt.ylabel(r'dp_dr')
+
+    u_grid = compute_u_velocity(params, r, z, field_vars, h)
+    integral_u_r = np.trapz(r[:, None] * u_grid, dx=params.dz, axis=1)
+    grad_u_r = as_grad(integral_u_r, params.dr)
+
+    # Plot
+    plt.rcParams.update({'font.size': 16})
+    plt.rcParams['axes.linewidth']=3
+
+    plt.figure(figsize = (12,7))
+    plt.plot(r,integral_u_r)
+    plt.xlabel(r'$r$')
+    plt.ylabel(r'integral_u_r')
+
+    # Plot
+    plt.rcParams.update({'font.size': 16})
+    plt.rcParams['axes.linewidth']=3
+
+    plt.figure(figsize = (12,7))
+    plt.plot(r,grad_u_r)
+    plt.xlabel(r'$r$')
+    plt.ylabel(r'grad_u_r')
+
+    plt.figure(figsize=(10, 6))
+    plt.imshow(
+        field_vars.u_grid.T,
+        aspect="auto",
+        origin="lower",
+        extent=[-params.r_c, params.r_c, 0, np.max(z)],
+        cmap="viridis",
+    )
+    plt.plot(
+        r, h, color="red", linewidth=2, label="Height profile $h(r)$"
+    )  # Overlay height profile
+    plt.xlabel("Radius (m)")
+    plt.ylabel("Height (m)")
+    plt.colorbar(label="Radial velocity $u(r, z)$")
+    plt.title("Radial Velocity Field and Height Profile")
+    plt.legend()
+    plt.show()
+
+    radial_term = (-1 / r) * grad_u_r
+    dh_dt = radial_term + params.w_e
+
+    # Plot
+    plt.rcParams.update({'font.size': 16})
+    plt.rcParams['axes.linewidth']=3
+
+    plt.figure(figsize = (12,7))
+    plt.plot(r,radial_term)
+    plt.xlabel(r'$r$')
+    plt.ylabel(r'radial_term')
+
+    # Plot
+    plt.rcParams.update({'font.size': 16})
+    plt.rcParams['axes.linewidth']=3
+
+    plt.figure(figsize = (12,7))
+    plt.plot(r,dh_dt)
+    plt.xlabel(r'$r$')
+    plt.ylabel(r'dh_dt')
+
+    h_profiles = eval(params, r, z, field_vars, h.copy())
+
+    plt.figure(figsize=(10, 6))
+    for i, h_t in enumerate(h_profiles[::50]):
+        plt.plot(r * 1e-3, h_t * 1e-3, c="dimgrey")
+    plt.plot(r * 1e-3, h_profiles[0] * 1e-3, c="k", label="h0")
+    plt.plot(r * 1e-3, h_profiles[-1] * 1e-3, c="r", label="Final")
+    plt.xlabel("Radius (mm)")
+    plt.ylabel("Height (mm)")
+    plt.legend()
+    plt.title("Evolution of Droplet Height Profile Over Time")
+    plt.show()
+
+if __name__ == "__main__":
+    run()
