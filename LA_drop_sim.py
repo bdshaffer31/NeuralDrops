@@ -1,8 +1,9 @@
+
 import numpy as np
 from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
 from dataclasses import dataclass
-
+import scipy.integrate as integrate
 from scipy.ndimage import gaussian_filter
 
 
@@ -15,6 +16,8 @@ class FieldVariables:
     sigma_grid: np.ndarray  # Surface tension grid
     rho_grid: np.ndarray  # Density grid
     diff_grid: np.ndarray  # Diffusivity grid
+
+    m_dot_grid: np.ndarray  # Diffusivity grid
 
 
 @dataclass
@@ -33,6 +36,19 @@ class SimulationParams:
     eta: float  # Viscosity (Pa*s)
     d_sigma_dr: float  # Surface tension gradient
 
+    
+    # Antoine's Equation
+    A: float  
+    B: float
+    C: float
+
+    D: float #Diffusvity of Vapor
+    Mw: float #Molecular weight of Vapor
+
+    Rs: float #Gas Constant
+    T: float #Temperature of drop exterior
+    RH: float #Relative Humidity
+
 
 def setup_grids(params: SimulationParams):
     """Set up the grid arrays and initial field values."""
@@ -49,6 +65,8 @@ def setup_grids(params: SimulationParams):
         sigma_grid=params.sigma * np.ones((params.Nr)),  # constant surface tension
         rho_grid=params.rho * np.ones((params.Nr, params.Nz)),  # density
         diff_grid=params.rho * np.ones((params.Nr, params.Nz)),  # diffusivity
+
+        m_dot_grid=np.zeros((params.Nr)),  # mass loss
     )
 
     return r, z, field_vars
@@ -150,6 +168,38 @@ def h_mask_grid(grid_data, h, z):
             if z_val > h_r:
                 masked_grid[i, j] = 0
     return masked_grid
+
+def mass_loss (params,field_vars,r,theta):
+    p_sat = 10**(params.A-params.B/(params.C+params.T-273.15)) #Antoine's Equation
+    p_sat = p_sat/760.0*101325.0 # conversion (mmHg) to (Pa)
+
+    R_c = params.r_c #TODO
+    b_c = 1.0 #TODO
+    J_delta = 0 #Contribution from nonhomogenous surface concentration (multi-phase drops)
+
+    cosh_alpha = (r**2*np.cos(theta) + R_c*np.sqrt(np.square(R_c)-np.square(r)*np.square(np.sin(theta))))/(np.square(R_c)-np.square(r))
+
+    integral = np.zeros_like(field_vars.m_dot_grid)
+    for i in range(len(r)):
+        integral[i] , err = integrate.quad(lambda x:
+                                           np.tanh(np.pi*x/(2.0*np.pi-2.0*theta))/
+                                           (np.cosh(np.pi*x/(2.0*np.pi-2.0*theta))*np.sqrt(np.cosh(x)-cosh_alpha[i]))
+                                           , np.arccosh(cosh_alpha[i]) , np.inf)
+
+    N_prime_alpha = np.sqrt(2)*np.power(np.sqrt((cosh_alpha+np.cos(theta))),3)
+    J_c = np.pi*N_prime_alpha*integral/(2*np.sqrt(2)*np.square(np.pi-theta))
+    J_c[-1]=J_c[-2]*2 # Avoid NaN at r = R_c
+
+    J_term = (b_c - params.RH)*J_c + J_delta
+
+    m_dot = params.D*params.Mw*p_sat/(params.Rs*params.T*R_c)*J_term
+    return m_dot
+
+
+def evap_velocity (params,m_dot,h):
+    dh_dr = as_grad(h,params.dr)
+    w_e = -m_dot/params.rho* np.sqrt(1 + np.square(dh_dr))
+    return w_e
 
 
 def interp_h_mask_grid(grid_data, h, z):
@@ -352,10 +402,19 @@ def run():
         dz=5e-4 / 110,  # Vertical grid spacing
         dt=5e-5,  # Time step size eg 1e-5
         rho=1,  # Density of the liquid (kg/m^3) eg 1
-        w_e=0.0,  # -1e-3,  # Constant evaporation rate (m/s) eg 1e-4
+        w_e=-1e-3, # -1e-3,  # Constant evaporation rate (m/s) eg 1e-4
         sigma=0.072,  # Surface tension (N/m) eg 0.072
         eta=1e-3,  # Viscosity (Pa*s) eg 1e-3
         d_sigma_dr=0.0,  # Surface tension gradient
+
+        A = 8.07131, # Antoine Equation (-)
+        B = 1730.63, # Antoine Equation (-)
+        C = 233.4, # Antoine Equation (-)
+        D = 2.42e-5, # Diffusivity of H2O in Air (m^2/s)
+        Mw = 0.018, # Molecular weight H2O vapor (kg/mol)
+        Rs = 8.314, # Gas Constant (J/(K*mol))
+        T = 293.15, # Ambient Temperature (K)
+        RH = 0.20, # Relative Humidity (-)
     )
 
     # Initialize the grids and field variables
