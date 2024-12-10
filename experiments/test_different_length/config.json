@@ -1,24 +1,17 @@
 {
     "manual_seed": 42,
-    "num_epochs": 10,
+    "num_epochs": 2,
     "lr": 0.01,
+    "model_type": "node",
     "hidden_dim": 256,
     "num_hidden_layers": 6,
     "solver": "rk4",
     "activation_fn": "relu",
     "output_fn": "identity",
     "data_dir": "data",
-    "data_len": 7000,
     "batch_size": 32,
     "exp_nums": [
-        10,
-        15,
-        18,
-        9,
-        6,
-        8,
-        48,
-        47
+        1
     ],
     "valid_solutes": null,
     "valid_substrates": null,
