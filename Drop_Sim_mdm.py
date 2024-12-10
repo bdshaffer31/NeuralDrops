@@ -1,4 +1,3 @@
-
 import numpy as np
 from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
@@ -48,8 +47,6 @@ class SimulationParams:
     Rs: float #Gas Constant
     T: float #Temperature of drop exterior
     RH: float #Relative Humidity
-
-    theta_e: float #equilibrium contact angle
 
 
 def setup_grids(params: SimulationParams):
@@ -174,8 +171,8 @@ def calc_curvature(params, r, z, field_vars, h):
 def calc_curvature_v2(params, r, z, field_vars, h):
     dh_dr = as_grad(h, params.dr)
     d2h_dr2 = as_grad(dh_dr, params.dr)
-    curvature = np.abs(d2h_dr2) / np.power(np.sqrt(1 + np.square(dh_dr)),3)
-    return curvature
+    curvature_term = np.abs(d2h_dr2) / np.sqrt(1 + dh_dr**2) ** 3
+    return curvature_term
 
 
 def calc_pressure(params, r, z, field_vars, h):
@@ -192,21 +189,20 @@ def calc_pressure_v2(params, r, z, field_vars, h):
     """Compute the radial pressure gradient using the nonlinear curvature formula."""
     curvature_term = calc_curvature_v2(params, r, z, field_vars, h)
     pressure = curvature_term * params.sigma * 2
-    pressure[0]=pressure[1]
     return pressure
-
-def disjoining_pressure (params):
-    h_star = params.hmax0/100
-    n = 3
-    m = 2
-    dis_press = -params.sigma*np.square(params.theta_e)*(n-1)*(m-1)/(n-m)/(2*h_star)*((h_star/params.hmax0)**n-(h_star/params.hmax0)**m)
-    return dis_press
 
 
 def compute_u_velocity(params, r, z, field_vars, h):
     """Compute radial velocity u(r, z, t) using the given equation."""
     u_grid = np.zeros_like(field_vars.u_grid)
-    pressure = calc_pressure(params, r, z, field_vars, h) + disjoining_pressure(params)
+    
+    h_star = params.hmax0/100
+    n = 3
+    m = 2
+    #dis_press = -params.sigma*np.square(params.theta_e)*(n-1)*(m-1)/(n-m)/(2*h_star)*((h_star/params.hmax0)**n-(h_star/params.hmax0)**m)
+
+    pressure = calc_pressure(params, r, z, field_vars, h) #+ dis_press
+
     dp_dr = as_grad(pressure, params.dr)
     for i in range(len(r)):
         h_r = h[i]
@@ -472,11 +468,11 @@ def run():
     params = SimulationParams(
         r_c=1e-3,  # Radius of the droplet in meters
         hmax0=5e-4,  # Initial droplet height at the center in meters
-        Nr=200,  # Number of radial points
-        Nz=110,  # Number of z-axis points
-        Nt=500,  # Number of time steps
-        dr=1e-3 / 200,  # Radial grid spacing
-        dz=5e-4 / 110,  # Vertical grid spacing
+        Nr=501,  # Number of radial points
+        Nz=111,  # Number of z-axis points
+        Nt=100,  # Number of time steps
+        dr=1e-3 / (501-1),  # Radial grid spacing
+        dz=5e-4 / (111-1),  # Vertical grid spacing
         dt=5e-5,  # Time step size eg 1e-5
         rho=1,  # Density of the liquid (kg/m^3) eg 1
         w_e=-1e-3, # -1e-3,  # Constant evaporation rate (m/s) eg 1e-4
@@ -492,7 +488,6 @@ def run():
         Rs = 8.314, # Gas Constant (J/(K*mol))
         T = 293.15, # Ambient Temperature (K)
         RH = 0.20, # Relative Humidity (-)
-        theta_e = 20/180*np.pi # Equilibrium Contact Angle (rads)
     )
 
     # Initialize the grids and field variables
@@ -505,8 +500,8 @@ def run():
     h_profiles = eval(params, r, z, field_vars, h_0.copy())
 
     # plot the velocity profile and
-    inspect(params, r, z, field_vars, h_profiles[1])
-    plot_velocity(params, r, z, field_vars, h_profiles[1])
+    inspect(params, r, z, field_vars, h_profiles[-1])
+    plot_velocity(params, r, z, field_vars, h_profiles[-1])
 
 
 if __name__ == "__main__":
