@@ -51,7 +51,7 @@ def setup_grids(params: SimulationParams):
     """Set up the grid arrays and initial field values."""
     # Radial and vertical grids
     r = np.linspace(-params.r_c, params.r_c, params.Nr + 1)  # r grid (avoiding r=0)
-    z = np.linspace(0, params.hmax0, params.Nz + 1)  # z grid
+    z = np.linspace(0, 1.2*params.hmax0, params.Nz + 1)  # z grid
 
     # Initialize field arrays
     field_vars = FieldVariables(
@@ -182,10 +182,6 @@ def calculate_dh_dt(t, params, r, z, field_vars, h):
 
     # Calculate dh/dt as radial term plus evaporation rate
     radial_term = (-1 / r) * grad_u_r
-    # TODO bcs
-    radial_term[0] = radial_term[3]
-    radial_term[1] = radial_term[3]
-    radial_term[2] = radial_term[3]
     # TODO negative sign
     dh_dt = radial_term + params.w_e
     # dh_dt = -1 * radial_term + params.w_e
@@ -339,13 +335,13 @@ def run():
     # Define the simulation parameters
     params = SimulationParams(
         r_c=1e-3,  # Radius of the droplet in meters
-        hmax0=3e-4,  # Initial droplet height at the center in meters
-        Nr=699,  # Number of radial points
+        hmax0=5e-4,  # Initial droplet height at the center in meters
+        Nr=199,  # Number of radial points
         Nz=111,  # Number of z-axis points
-        Nt=100,  # Number of time steps
+        Nt=10,  # Number of time steps
         dr= 2.0 * 1e-3 / 699,  # Radial grid spacing
-        dz=3e-4 / 111,  # Vertical grid spacing
-        dt=2e-4,  # Time step size eg 1e-5
+        dz=5e-4 / 111,  # Vertical grid spacing
+        dt=1e-5,  # Time step size eg 1e-5
         rho=1,  # Density of the liquid (kg/m^3) eg 1
         w_e=-1e-3, # -1e-3,  # Constant evaporation rate (m/s) eg 1e-4
         sigma=0.072,  # Surface tension (N/m) eg 0.072
@@ -366,7 +362,7 @@ def run():
     r, z, field_vars = setup_grids(params)
 
     # run simulation and plot final profile
-    h_0 = setup_cap_initial_h_profile(
+    h_0 = setup_parabolic_initial_h_profile(
         r, params.hmax0, params.r_c
     )
     h_profiles = eval(params, r, z, field_vars, h_0.copy())
