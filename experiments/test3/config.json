@@ -10,7 +10,14 @@
     "data_dir": "data",
     "data_len": 7000,
     "batch_size": 32,
-    "exp_nums": null,
+    "exp_nums": [
+        25,
+        26,
+        27,
+        28,
+        29,
+        30
+    ],
     "valid_solutes": [
         "PVA"
     ],
