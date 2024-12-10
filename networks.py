@@ -114,19 +114,13 @@ class FNO(nn.Module):
         batch_size, grid_size = h_0.shape
 
         # Expand z and t to match the spatial dimensions of h_0
-        z_expanded = z.unsqueeze(1).expand(
-            batch_size, grid_size, -1
-        )
-        t_expanded = t.unsqueeze(1).expand(
-            batch_size, grid_size, -1
-        )
+        z_expanded = z.unsqueeze(1).expand(batch_size, grid_size, -1)
+        t_expanded = t.unsqueeze(1).expand(batch_size, grid_size, -1)
 
         h_0_expanded = h_0.unsqueeze(-1)
 
         # Concatenate inputs
-        input_data = torch.cat(
-            [h_0_expanded, z_expanded, t_expanded], dim=-1
-        )
+        input_data = torch.cat([h_0_expanded, z_expanded, t_expanded], dim=-1)
 
         # lift to feature space with first fully connect layer
         x = self.fc0(input_data)
@@ -186,12 +180,9 @@ class SpectralConv1d(nn.Module):
 # Flux modeling FNO implementation
 # ================================
 
+
 class FNO_Flux(FNO):
-    def __init__(
-        self,
-        *args,
-        **kwargs
-    ):
+    def __init__(self, *args, **kwargs):
         """
         Generalized Fourier Neural Operator.
 
@@ -211,16 +202,12 @@ class FNO_Flux(FNO):
         batch_size, grid_size = h_0.shape
 
         # Expand z and t to match the spatial dimensions of h_0
-        z_expanded = z.unsqueeze(1).expand(
-            batch_size, grid_size, -1
-        )
+        z_expanded = z.unsqueeze(1).expand(batch_size, grid_size, -1)
 
         h_0_expanded = h_0.unsqueeze(-1)
 
         # Concatenate inputs
-        input_data = torch.cat(
-            [h_0_expanded, z_expanded], dim=-1
-        )
+        input_data = torch.cat([h_0_expanded, z_expanded], dim=-1)
 
         # lift to feature space with first fully connect layer
         x = self.fc0(input_data)
@@ -232,7 +219,7 @@ class FNO_Flux(FNO):
             x2 = w_layer(x)
             x = x1 + x2
             x = self.activation_fn(x)
-        
+
         x = x.permute(0, 2, 1)
 
         # Apply final fully connected layers to get to target output size
@@ -241,6 +228,7 @@ class FNO_Flux(FNO):
         if self.output_dim == 1:
             return x.squeeze(-1)
         return x  # Final output: [batch, grid_size, output_dim]
+
 
 class FNOFluxODEWrapper(nn.Module):
     def __init__(self, fno_model):
@@ -258,7 +246,29 @@ class FNOFluxODEWrapper(nn.Module):
         flux = self.fno_model(h, self.conditioning)
         return -flux  # Negative sign to represent evaporation
 
+
+class FNOFluxODESolver(nn.Module):
+    def __init__(self, ode_func, solver_type="rk4"):
+        super(FNOFluxODESolver, self).__init__()
+        self.ode_func = ode_func
+        self.solver_type = solver_type
+        self.solver = self.init_solver()
+
+    def init_solver(self):
+        if self.solver_type == "euler":
+            return ForwardEuler(self.ode_func)
+        elif self.solver_type == "rk4":
+            return RK4(self.ode_func)
+        elif self.solver_type == "implicit_euler":
+            return ImplicitEuler(self.ode_func)
+
+    def forward(self, *args):
+        return self.solver.forward(*args)
+
+
 class ForwardEuler(nn.Module):
+    """Explicit forward Euler solver"""
+
     def __init__(self, ode_func):
         super(ForwardEuler, self).__init__()
         self.ode_func = ode_func
@@ -267,16 +277,22 @@ class ForwardEuler(nn.Module):
         self.ode_func.set_conditioning(z)
         num_steps = len(t)
         dt = t[1] - t[0]
-        x_history = torch.zeros((num_steps, *x0.shape), dtype=x0.dtype, device=x0.device)
+        x_history = torch.zeros(
+            (num_steps, *x0.shape), dtype=x0.dtype, device=x0.device
+        )
         x = x0
         x_history[0] = x
         for i in range(1, num_steps):
             x = x + dt * self.ode_func(t[i - 1], x)
-            x_history[i] = torch.max(torch.zeros_like(x), x) # height always positive !!!
+            x = torch.max(torch.zeros_like(x), x)  # height always positive !!!
+            x_history[i] = x
 
         return x_history
 
+
 class RK4(nn.Module):
+    """Explicit RK4 solver"""
+
     def __init__(self, ode_func):
         super(RK4, self).__init__()
         self.ode_func = ode_func
@@ -285,13 +301,15 @@ class RK4(nn.Module):
         self.ode_func.set_conditioning(z)
         num_steps = len(t)
         dt = t[1] - t[0]
-        x_history = torch.zeros((num_steps, *x0.shape), dtype=x0.dtype, device=x0.device)
+        x_history = torch.zeros(
+            (num_steps, *x0.shape), dtype=x0.dtype, device=x0.device
+        )
         x = x0
         x_history[0] = x
 
         for i in range(1, num_steps):
             t_i = t[i - 1]
-            
+
             k1 = self.ode_func(t_i, x)
             k2 = self.ode_func(t_i + dt / 2, x + dt * k1 / 2)
             k3 = self.ode_func(t_i + dt / 2, x + dt * k2 / 2)
@@ -301,6 +319,42 @@ class RK4(nn.Module):
             x_history[i] = x
 
         return x_history
+
+
+class ImplicitEuler(nn.Module):
+    """Implicit (Backward) Euler solver"""
+
+    def __init__(self, ode_func, num_iterations=3):
+        super(ImplicitEuler, self).__init__()
+        self.ode_func = ode_func
+        self.num_iterations = num_iterations
+
+    def forward(self, x0, z, t):
+        self.ode_func.set_conditioning(z)
+
+        num_steps = len(t)
+        dt = t[1] - t[0]
+        x_history = torch.zeros(
+            (num_steps, *x0.shape), dtype=x0.dtype, device=x0.device
+        )
+        x = x0
+        x_history[0] = x
+
+        for i in range(1, num_steps):
+            t_next = t[i]
+
+            # Initial guess for x_{i+1} (using Forward Euler step as a guess)
+            x_next = x + dt * self.ode_func(t_next, x)
+
+            # Fixed-point iteration to solve for x_{i+1}
+            for _ in range(self.num_iterations):
+                x_next = x + dt * self.ode_func(t_next, x_next)
+
+            x = x_next
+            x_history[i] = x
+
+        return x_history
+
 
 class Sine(nn.Module):
     def forward(self, x):

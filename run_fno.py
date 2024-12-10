@@ -7,6 +7,7 @@ import networks
 import visualize
 import logger
 import load_data
+import utils
 
 
 def validate_fno_model(model, val_loader, loss_fn):
@@ -146,7 +147,7 @@ def main(train=False):
     config = {
         # Training params
         "manual_seed": 42,
-        "num_epochs": 2,
+        "num_epochs": 10,
         "lr": 1e-2,
         # Model params
         "model_type": "fno",
@@ -159,18 +160,20 @@ def main(train=False):
         # Data params
         "data_dir": "data",
         "batch_size": 32,
-        "exp_nums": [1],  # [10, 15, 18, 9, 6, 8, 48, 47], # None = use all experiments
+        "exp_nums": utils.good_run_numbers()[:10], # None = use all experiments
         "valid_solutes": None,  # None = keep all solutes
         "valid_substrates": None,  # None = keep all substrates
         "valid_temps": None,  # None = keep all temperatures
         "temporal_subsample": 15,  # Temporal subsampling of profile data
         "spatial_subsample": 5,
+        "temporal_pad": 128,
+        "axis_symmetric": True, # split along x axis
         "use_log_transform": False,
         "val_ratio": 0.1,
     }
     torch.manual_seed(config["manual_seed"])
 
-    run_dir = "test_fno_operator"
+    run_dir = "test_fno_axis_symmetric"
     if train:
         run_training(config, run_dir)
     visualize.viz_results(run_dir)
