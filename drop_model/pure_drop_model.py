@@ -134,107 +134,6 @@ class PureDropModel:
         return self.calc_flow_dh_dt(h) + self.calc_evap_dh_dt(h)
 
 
-class PureDropModelSpectral:
-    def __init__(self, params, evap_model=None, sigma=10):
-        self.params = params
-        self.r, self.z = self.setup_grids()
-        self.evap_model = evap_model
-        self.sigma = sigma
-
-        # Compute the wave numbers for spectral differentiation
-        self.k_r = self.compute_wave_numbers(self.params.Nr, self.params.dr)
-
-    def setup_grids(self):
-        r = torch.linspace(
-            -self.params.r_c, self.params.r_c, self.params.Nr, dtype=torch.float64
-        )
-        z = torch.linspace(0, self.params.hmax0, self.params.Nz, dtype=torch.float64)
-        return r, z
-
-    def compute_wave_numbers(self, N, dx):
-        """Compute the wave numbers for spectral differentiation."""
-        k = torch.fft.fftfreq(N, d=dx) * 2 * torch.pi
-        return k
-
-    def spectral_derivative(self, h):
-        """Compute the spectral derivative of the height profile h."""
-        fft_h = torch.fft.fft(h)
-        fft_dh = 1j * self.k_r * fft_h
-        dh = torch.fft.ifft(fft_dh).real
-        return dh
-
-    @staticmethod
-    def safe_inv(x, epsilon=1e-6):
-        return 1 / (x + epsilon)
-
-    # Curvature calculation
-    def calc_curvature(self, h):
-        dh_dr = self.spectral_derivative(h)
-        curvature_term = (self.r * dh_dr) / torch.sqrt(1 + dh_dr**2)
-        return curvature_term
-
-    # Pressure calculation
-    def calc_pressure(self, h):
-        curvature_term = self.calc_curvature(h)
-        d_curvature_dr = self.spectral_derivative(curvature_term)
-        pressure = -self.params.sigma * self.safe_inv(self.r) * d_curvature_dr
-        return pressure
-
-    # u velocity calculation
-    def calc_u_velocity(self, h):
-        u_grid = torch.zeros(
-            (self.params.Nr, self.params.Nz), dtype=torch.float64, device=h.device
-        )
-        pressure = self.calc_pressure(h)
-        dp_dr = self.spectral_derivative(pressure)
-        h_r = h.unsqueeze(1)
-        z_grid = self.z.unsqueeze(0)
-        dp_dr = dp_dr.unsqueeze(1)
-        integrand = -(dp_dr * (h_r - z_grid)) / self.params.eta
-        u_grid = torch.cumsum(
-            (integrand[:, :-1] + integrand[:, 1:]) * 0.5 * self.params.dz, dim=1
-        )
-        u_grid = torch.cat(
-            [torch.zeros((self.params.Nr, 1), device=h.device), u_grid], dim=1
-        )
-        return u_grid
-
-    # w velocity calculation
-    def calc_w_velocity(self, h, u_grid):
-        w_grid = torch.zeros(
-            (self.params.Nr, self.params.Nz), dtype=torch.float64, device=h.device
-        )
-        ur_grid = u_grid * self.r.unsqueeze(1)
-        d_ur_grid_dr = self.spectral_derivative(ur_grid.sum(dim=1))
-        div_r = self.safe_inv(self.r).unsqueeze(1)
-        integrand = div_r * d_ur_grid_dr.unsqueeze(1)
-
-        w_grid[:, 1:] = -torch.cumsum(
-            (integrand[:, :-1] + integrand[:, 1:]) * 0.5 * self.params.dz, dim=1
-        )
-        return w_grid
-
-    # Flow-induced dh/dt calculation
-    def calc_flow_dh_dt(self, h):
-        u_grid = self.calc_u_velocity(h)
-        integral_u_r = torch.trapezoid(
-            self.r.unsqueeze(1) * u_grid, dx=self.params.dz, dim=1
-        )
-        grad_u_r = self.spectral_derivative(integral_u_r) * self.params.dz
-        flow_dh_dt = -self.safe_inv(self.r) * grad_u_r
-        return flow_dh_dt
-
-    # Evaporation-induced dh/dt calculation
-    def calc_evap_dh_dt(self, h):
-        if self.evap_model is None:
-            return torch.zeros_like(h)
-        return self.evap_model(h)
-
-    # Total dh/dt calculation
-    def calc_dh_dt(self, h):
-        return self.calc_flow_dh_dt(h) + self.calc_evap_dh_dt(h)
-
-
 def main():
     import drop_model.utils as utils
     import drop_model.drop_viz as drop_viz
@@ -267,9 +166,16 @@ def main():
     drop_model = PureDropModel(params, evap_model=evap_model, sigma=10)
     # drop_model = PureDropModelSpectral(params, evap_model=evap_model, sigma=10)
 
-    h_0 = utils.setup_parabolic_initial_h_profile(
-        drop_model.r, 0.8 * params.hmax0, params.r_c, order=4
+    # h_0 = utils.setup_parabolic_initial_h_profile(
+    #     drop_model.r, 0.8 * params.hmax0, params.r_c, order=4
+    # )
+
+    h_0 = utils.setup_cap_initial_h_profile(
+        drop_model.r, 0.8 * params.hmax0, params.r_c
     )
+    h_0 = torch.tensor(h_0)
+
+    drop_viz.flow_viz(drop_model, h_0)
 
     h_history = utils.run_forward_euler_simulation(drop_model, h_0, t_lin)
     drop_viz.plot_height_profile_evolution(drop_model.r, h_history, params)

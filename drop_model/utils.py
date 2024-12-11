@@ -30,7 +30,7 @@ def setup_parabolic_initial_h_profile(r, h0, r_c, drop_fraction=1.0, order=2):
 def setup_cap_initial_h_profile(r, h0, r_c):
     # setup a spherical cap initial height profile
     R = (r_c**2 + h0**2) / (2 * h0)
-    theta = torch.arccos(1 - h0 * R)
+    # theta = torch.arccos(torch.tensor([1 - h0 * R]))
     h = torch.sqrt((2.0 * R * (r + R) - torch.square(r + R))) - (R - h0)
 
     return h
