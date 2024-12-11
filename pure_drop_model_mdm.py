@@ -241,9 +241,9 @@ def main():
 
     drop_model = PureDropModel(params, evap_model=deegan_evap_model, sigma=10)
 
-    h_0 = utils.setup_parabolic_initial_h_profile(
-        drop_model.r, 0.8 * params.hmax0, params.r_c, order=4
-    )
+    #h_0 = utils.setup_parabolic_initial_h_profile(
+    #    drop_model.r, 0.8 * params.hmax0, params.r_c, order=4
+    #)
 
 
 
