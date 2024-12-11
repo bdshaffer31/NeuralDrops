@@ -6,7 +6,7 @@ from tqdm import tqdm
 import networks
 import visualize
 import logger
-import load_data
+import setup_dataloader
 import utils
 
 
@@ -91,7 +91,7 @@ def load_node_model_from_logger(log_loader):
 def run_training(config, run_dir):
     exp_logger = logger.ExperimentLogger(run_dir=run_dir, use_timestamp=False)
 
-    data = load_data.setup_data(config)
+    data = setup_dataloader.setup_data(config)
     train_loader, val_loader, dataset = data
 
     # Initialize ODE model, loss function, and optimizer
@@ -135,46 +135,45 @@ def run_training(config, run_dir):
         exp_logger,
     )
 
+# def main(train=False):
+#     config = {
+#         # training params
+#         "manual_seed": 42,
+#         "num_epochs": 2,
+#         "lr": 1e-2,
+#         # model params
+#         "model_type": "node",
+#         "hidden_dim": 256,
+#         "num_hidden_layers": 6,
+#         "solver": "rk4",
+#         "activation_fn": "relu",
+#         "output_fn": "identity",
+#         # data params
+#         "data_dir": "data",
+#         "batch_size": 32,
+#         "exp_nums": utils.good_run_numbers()[
+#             :1
+#         ],  # if None use all, otherwise give a list of ints
+#         "valid_solutes": None,  # if None keep all solutes, otherwise give a list of strings
+#         "valid_substrates": None,  # if None keep all substrates, otherwise give a list of strings
+#         "valid_temps": None,  # if None keep all substrates, otherwise give a list of floats
+#         "temporal_subsample": 15,  # temporal subsampling on profile data
+#         "spatial_subsample": 5,
+#         "temporal_pad": 128,
+#         "axis_symmetric": False,  # split along x axis
+#         "use_log_transform": False,
+#         "traj_len": 64,
+#         "val_ratio": 0.1,
+#     }
+#     torch.manual_seed(config["manual_seed"])
 
-def main(train=False):
-    config = {
-        # training params
-        "manual_seed": 42,
-        "num_epochs": 2,
-        "lr": 1e-2,
-        # model params
-        "model_type": "node",
-        "hidden_dim": 256,
-        "num_hidden_layers": 6,
-        "solver": "rk4",
-        "activation_fn": "relu",
-        "output_fn": "identity",
-        # data params
-        "data_dir": "data",
-        "batch_size": 32,
-        "exp_nums": utils.good_run_numbers()[
-            :1
-        ],  # if None use all, otherwise give a list of ints
-        "valid_solutes": None,  # if None keep all solutes, otherwise give a list of strings
-        "valid_substrates": None,  # if None keep all substrates, otherwise give a list of strings
-        "valid_temps": None,  # if None keep all substrates, otherwise give a list of floats
-        "temporal_subsample": 15,  # temporal subsampling on profile data
-        "spatial_subsample": 5,
-        "temporal_pad": 128,
-        "axis_symmetric": True,  # split along x axis
-        "use_log_transform": False,
-        "traj_len": 64,
-        "val_ratio": 0.1,
-    }
-    torch.manual_seed(config["manual_seed"])
-
-    run_dir = "test_different_length"
-    if train:
-        run_training(config, run_dir)
-    visualize.viz_results(run_dir)
+#     run_dir = "test_different_length"
+#     if train:
+#         run_training(config, run_dir)
+#     visualize.viz_results(run_dir)
 
 
-if __name__ == "__main__":
-    # TODO load config from input + defaults
-    # split out train and plotting functions
-    main(train=True)
+# if __name__ == "__main__":
+#     # TODO load config from input + defaults
+#     # split out train and plotting functions
+#     main(train=True)
