@@ -15,6 +15,18 @@ class SimulationParams:
     sigma: float  # Surface tension (N/m)
     eta: float  # Viscosity (Pa*s)
 
+    # Antoine's Equation
+    A: float  
+    B: float
+    C: float
+
+    D: float #Diffusvity of Vapor
+    Mw: float #Molecular weight of Vapor
+
+    Rs: float #Gas Constant
+    T: float #Temperature of drop exterior
+    RH: float #Relative Humidity
+
 
 def setup_parabolic_initial_h_profile(r, h0, r_c, drop_fraction=1.0, order=2):
     # setup up a polynomial initial drop profile
