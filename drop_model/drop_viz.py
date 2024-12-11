@@ -1,7 +1,7 @@
 # import numpy as np
 import torch
 import matplotlib.pyplot as plt
-
+import matplotlib.ticker as ticker
 
 def set_styling():
     plt.rcParams.update(
@@ -162,6 +162,68 @@ def plot_velocity(drop_model, h):
     plt.ylabel("Height (m)")
     plt.colorbar(label="Vertical velocity $w(r, z)$")
     plt.title("Vertical Velocity")
+    plt.grid(False)
+    plt.tight_layout()
+    plt.legend()
+    plt.show()
+
+def flow_viz(drop_model, h):
+    u_grid = drop_model.calc_u_velocity(h)
+    w_grid = drop_model.calc_w_velocity(h, u_grid)
+    flow_magnitude = torch.sqrt(u_grid**2 + w_grid**2)
+    flow_magnitude[flow_magnitude == 0.0] = torch.nan
+
+    plt.figure(figsize=(6, 3))
+    plt.imshow(
+        flow_magnitude.T,
+        aspect="auto",
+        origin="lower",
+        extent=[
+            -drop_model.params.r_c,
+            drop_model.params.r_c,
+            0,
+            torch.max(drop_model.z),
+        ],
+        cmap="magma",
+    )
+    plt.plot(
+        drop_model.r, h, color="k", linewidth=2, label="$h(r)$"
+    )  # Overlay height profile
+
+    # Create a meshgrid for quiver plot
+    R, Z = torch.meshgrid(drop_model.r, drop_model.z, indexing="ij")
+
+    # Downsample for quiver plot (to avoid too many arrows)
+    quiver_step = 6  # Adjust this for clarity
+    R_down = R[::quiver_step, ::quiver_step]
+    Z_down = Z[::quiver_step, ::quiver_step]
+    U_down = u_grid[::quiver_step, ::quiver_step]
+    W_down = w_grid[::quiver_step, ::quiver_step]
+
+    magnitude = torch.sqrt(U_down**2 + W_down**2) + 1e-6  # Avoid division by zero
+    U_down_unit = U_down / magnitude
+    W_down_unit = W_down / magnitude
+
+    # Plot flow direction using quiver
+    plt.quiver(
+        R_down, Z_down, U_down_unit, W_down_unit,
+        color="white", scale=50, width=0.003, headwidth=3 # scale=100_000
+    )
+
+    formatter = ticker.ScalarFormatter(useMathText=True)
+    formatter.set_scientific(True)
+    formatter.set_powerlimits((-3, 3))  # Use scientific notation for values between 10^-3 and 10^3
+
+    plt.gca().xaxis.set_major_formatter(formatter)
+    plt.gca().yaxis.set_major_formatter(formatter)
+
+    # Add a single scale label for each axis
+    plt.gca().ticklabel_format(style='sci', axis='both', scilimits=(-3, 3))
+
+    plt.xlabel("Radius (m)")
+    plt.ylabel("Height (m)")
+    plt.colorbar(label="velocity magnitude $||v(r, z)||$")
+    plt.title("Flow Field")
     plt.grid(False)
     plt.tight_layout()
     plt.legend()
