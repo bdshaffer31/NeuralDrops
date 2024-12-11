@@ -67,6 +67,7 @@ def setup_parabolic_initial_h_profile(r, h0, r_c, drop_fraction=1.0, order=2):
     )
     return h
 
+
 def setup_cap_initial_h_profile(r, h0, r_c):
     # setup a spherical cap initial height profile
     R = (r_c**2 + h0**2) / (2 * h0)
@@ -75,6 +76,7 @@ def setup_cap_initial_h_profile(r, h0, r_c):
 
     return h
 
+
 def as_grad(x, dx):
     """Axis symmetric gradient (left side neumann boundary condition)"""
     # not used
@@ -82,8 +84,10 @@ def as_grad(x, dx):
     grad_x = np.gradient(x_padded, dx, edge_order=2)
     return grad_x[1:]
 
+
 def grad(x, dx):
     return np.gradient(x, dx, edge_order=2)
+
 
 def calc_curvature(params, r, z, field_vars, h):
     dh_dr = grad(h, params.dr)
@@ -92,6 +96,7 @@ def calc_curvature(params, r, z, field_vars, h):
     curvature_term = (r * dh_dr) / (np.sqrt(1 + dh_dr**2) + epsilon)
     return curvature_term
 
+
 # def safe_inv(r, epsilon=1e-6):
 #     div_r = np.zeros_like(r)
 #     mask = np.abs(r) > epsilon
@@ -99,8 +104,10 @@ def calc_curvature(params, r, z, field_vars, h):
 #     div_r[~mask] = 1 / epsilon
 #     return div_r
 
+
 def safe_inv(r):
-    return 1/ r
+    return 1 / r
+
 
 # def safe_inv(r, epsilon=1e-6):
 #     safe_r = np.where(np.abs(r) > epsilon, r, epsilon)
@@ -173,6 +180,7 @@ def interp_h_mask_grid(grid_data, h, z):
             masked_grid[i, :] = 0
     return masked_grid
 
+
 def calculate_dh_dt(t, params, r, z, field_vars, h):
     """Calculate dh/dt from u velocities for integration with solve_ivp"""
     h = h.reshape(len(r))
@@ -208,18 +216,21 @@ def run_forward_euler_simulation(params, r, z, field_vars, h0):
     h_profiles = np.array(h_profiles)
     return h_profiles
 
+
 def run_backward_euler_simulation(params, r, z, field_vars, h0):
     h_profiles = [h0.copy()]
     h = h0.copy()
 
     for t in range(params.Nt):
         print(t, end="\r")
-        
+
         def implicit_function(h_next):
-            dh_dt = calculate_dh_dt((t + 1) * params.dt, params, r, z, field_vars, h_next)
+            dh_dt = calculate_dh_dt(
+                (t + 1) * params.dt, params, r, z, field_vars, h_next
+            )
             return h_next - h - params.dt * dh_dt
-        
-        result = root(implicit_function, h, method='hybr', options={'maxfev': 20})
+
+        result = root(implicit_function, h, method="hybr", options={"maxfev": 20})
 
         if result.success:
             h = result.x
@@ -277,7 +288,7 @@ def inspect(params, r, z, field_vars, h):
     d_curvature_dr = grad(curvature_term, params.dr)
     pressure = calc_pressure(params, r, z, field_vars, h)
     dp_dr = grad(pressure, params.dr)
-    dp_dr[1] = dp_dr[0] + (dp_dr[2] - dp_dr[0])/2
+    dp_dr[1] = dp_dr[0] + (dp_dr[2] - dp_dr[0]) / 2
 
     u_grid = compute_u_velocity(params, r, z, field_vars, h)
     integral_u_r = np.trapz(r[:, None] * u_grid, dx=params.dz, axis=1)
@@ -376,8 +387,8 @@ def run():
         Nr=204,  # Number of radial points
         Nz=110,  # Number of z-axis points
         Nt=1000,  # Number of time steps
-        dr=2 * 5e-3 / (204-1),  # Radial grid spacing
-        dz=3e-4 / (110-1),  # Vertical grid spacing
+        dr=2 * 5e-3 / (204 - 1),  # Radial grid spacing
+        dz=3e-4 / (110 - 1),  # Vertical grid spacing
         dt=1e-2,  # Time step size eg 1e-5
         rho=1,  # Density of the liquid (kg/m^3) eg 1
         w_e=-1e-5,  # -1e-3,  # Constant evaporation rate (m/s) eg 1e-4
@@ -391,7 +402,7 @@ def run():
 
     # run simulation and plot final profile
     h_0 = setup_parabolic_initial_h_profile(
-        r, 0.8*params.hmax0, params.r_c, drop_fraction=1.0, order=4
+        r, 0.8 * params.hmax0, params.r_c, drop_fraction=1.0, order=4
     )
     # h_0 = setup_cap_initial_h_profile(r, 0.8*params.hmax0, params.r_c)
     h_profiles = eval(params, r, z, field_vars, h_0.copy())

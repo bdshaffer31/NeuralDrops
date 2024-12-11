@@ -41,9 +41,10 @@ def load_contents(data_dir, file):
 #     profile = profile[::temporal_subsample, ::spatial_subsample]
 #     return profile
 
+
 def load_profile_from_contents(
-        contents_data, end_pad=64, temporal_subsample=10, spatial_subsample=1
-    ):
+    contents_data, end_pad=64, temporal_subsample=10, spatial_subsample=1
+):
     # put all preprocessing to load profile data here
     # leaving as individual
     np_profile = contents_data["profile"]
@@ -57,7 +58,7 @@ def load_profile_from_contents(
     profile = utils.center_data(profile)
     profile = utils.central_split_data(profile)
 
-    profile = profile[:: temporal_subsample, :: spatial_subsample]
+    profile = profile[::temporal_subsample, ::spatial_subsample]
     return profile
 
 
