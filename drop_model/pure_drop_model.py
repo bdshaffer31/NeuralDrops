@@ -141,39 +141,58 @@ def main():
     drop_viz.set_styling()
     torch.set_default_dtype(torch.float64)
 
+    from load_data import ProfileDataset
+    dataset = ProfileDataset("data", [40], axis_symmetric=False, spatial_subsample=6, temporal_subsample=24)
+    viz_file = dataset.valid_files[0]
+    h_0 = dataset.data[viz_file]["profile"][1]
+    h_0 = dataset.profile_scaler.inverse_apply(h_0)
+    print(torch.max(h_0), torch.min(h_0))
+    h_0 -= torch.min(h_0)
+    h_0 /= torch.max(h_0)
+    h_0 -= 0.5
+    h_0 = torch.max(torch.zeros_like(h_0), h_0)
+    h_0 *= 0.0003 * 100
+    r_c = 0.0003 * 640
+    maxh0 = torch.max(h_0).item() * 1.2
+    print(h_0.shape, maxh0, print(r_c))
+
+    # TODO consider doing something different with these
     params = utils.SimulationParams(
-        r_c=1e-3,  # Radius of the droplet in meters
-        hmax0=5e-4,  # Initial droplet height at the center in meters
-        Nr=204,  # Number of radial points
+        r_c=r_c,  # Radius of the droplet in meters
+        hmax0=maxh0,  # Initial droplet height at the center in meters
+        Nr=214,  # Number of radial points
         Nz=110,  # Number of z-axis points
-        dr=2 * 1e-3 / (204 - 1),  # Radial grid spacing
-        dz=5e-4 / (110 - 1),  # Vertical grid spacing
+        dr=2 * r_c / (214 - 1),  # Radial grid spacing
+        dz=maxh0 / (110 - 1),  # Vertical grid spacing
         rho=1,  # Density of the liquid (kg/m^3) eg 1
         sigma=0.072,  # Surface tension (N/m) eg 0.072
         eta=1e-5,  # Viscosity (Pa*s) eg 1e-3
     )
-    Nt = 10
+    # params = utils.SimulationParams(
+    #     r_c=1e-2,  # Radius of the droplet in meters
+    #     hmax0=5e-4,  # Initial droplet height at the center in meters
+    #     Nr=214,  # Number of radial points
+    #     Nz=110,  # Number of z-axis points
+    #     dr=2 * 1e-2 / (214 - 1),  # Radial grid spacing
+    #     dz=5e-4 / (110 - 1),  # Vertical grid spacing
+    #     rho=1,  # Density of the liquid (kg/m^3) eg 1
+    #     sigma=0.072,  # Surface tension (N/m) eg 0.072
+    #     eta=1e-5,  # Viscosity (Pa*s) eg 1e-3
+    # )
+    Nt = 500
     dt = 1e-5
     t_lin = torch.linspace(0, dt * Nt, Nt)
 
-    x = torch.arange(params.Nr, dtype=torch.float64)
-    parabola = (x - params.Nr / 2) ** 6
-    parabola /= torch.max(parabola)
-
-    def evap_model(h, kappa=1e-3):
-        return -kappa * torch.ones_like(h) * parabola
+    def evap_model(h, kappa=1e0):
+        return -kappa * torch.ones_like(h)
 
     drop_model = PureDropModel(params, evap_model=evap_model, sigma=10)
-    # drop_model = PureDropModelSpectral(params, evap_model=evap_model, sigma=10)
 
     # h_0 = utils.setup_parabolic_initial_h_profile(
     #     drop_model.r, 0.8 * params.hmax0, params.r_c, order=4
     # )
 
-    h_0 = utils.setup_cap_initial_h_profile(
-        drop_model.r, 0.8 * params.hmax0, params.r_c
-    )
-    h_0 = torch.tensor(h_0)
+
 
     drop_viz.flow_viz(drop_model, h_0)
 
