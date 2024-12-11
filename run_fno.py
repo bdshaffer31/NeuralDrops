@@ -6,7 +6,7 @@ from tqdm import tqdm
 import networks
 import visualize
 import logger
-import load_data
+import setup_dataloader
 import utils
 
 
@@ -61,19 +61,20 @@ def train_fno(
 
 def load_fno_model_from_logger(log_loader):
     config = log_loader.load_config()
-    activation_fn = networks.get_activation(config["activation_fn"])
+    model_config = config["model_config"]
+    activation_fn = networks.get_activation(model_config["activation_fn"])
 
     # Load the best model from the logger
     best_model_path = log_loader.get_relpath("best_model.pth")
     model = networks.FNO(
-        config["input_dim"],
-        config["output_dim"],
-        num_fno_layers=config["num_fno_layers"],
-        modes=config["modes"],
-        width=config["fno_width"],
+        model_config["input_dim"],
+        model_config["output_dim"],
+        num_fno_layers=model_config["num_fno_layers"],
+        modes=model_config["modes"],
+        width=model_config["fno_width"],
         activation_fn=activation_fn,
-        num_fc_layers=config["num_fc_layers"],
-        fc_width=config["fc_width"],
+        num_fc_layers=model_config["num_fc_layers"],
+        fc_width=model_config["fc_width"],
     )
 
     # Load the best validation model
@@ -86,20 +87,7 @@ def load_fno_model_from_logger(log_loader):
 def run_training(config, run_dir):
     exp_logger = logger.ExperimentLogger(run_dir=run_dir, use_timestamp=False)
 
-    # Load dataset
-    # data = load_data.setup_fno_data(
-    #     batch_size=config["batch_size"],
-    #     exp_nums=config["exp_nums"],
-    #     valid_solutes=config["valid_solutes"],
-    #     valid_substrates=config["valid_substrates"],
-    #     valid_temps=config["valid_temps"],
-    #     temporal_subsample=config["temporal_subsample"],
-    #     spatial_subsample=config["spatial_subsample"],
-    #     use_log_transform=config["use_log_transform"],
-    #     data_dir=config["data_dir"],
-    #     test_split=config["val_ratio"],
-    # )
-    data = load_data.setup_data(config)
+    data = setup_dataloader.setup_data(config)
     train_loader, val_loader, profile_data = data
 
     # Initialize FNO model, loss function, and optimizer
@@ -109,21 +97,22 @@ def run_training(config, run_dir):
     input_dim = conditioning_dim + 2  # dim z + t + h_0 value
     output_dim = 1
 
-    config["grid_size"] = grid_size
-    config["conditioning_dim"] = conditioning_dim
-    config["input_dim"] = input_dim
-    config["output_dim"] = output_dim
-    activation_fn = networks.get_activation(config["activation_fn"])
+    config["model_config"]["grid_size"] = grid_size
+    config["model_config"]["conditioning_dim"] = conditioning_dim
+    config["model_config"]["input_dim"] = input_dim
+    config["model_config"]["output_dim"] = output_dim
+    model_config = config["model_config"]
+    activation_fn = networks.get_activation(model_config["activation_fn"])
 
     model = networks.FNO(
         input_dim,
         output_dim,
-        num_fno_layers=config["num_fno_layers"],
-        modes=config["modes"],
-        width=config["fno_width"],
+        num_fno_layers=model_config["num_fno_layers"],
+        modes=model_config["modes"],
+        width=model_config["fno_width"],
         activation_fn=activation_fn,
-        num_fc_layers=config["num_fc_layers"],
-        fc_width=config["fc_width"],
+        num_fc_layers=model_config["num_fc_layers"],
+        fc_width=model_config["fc_width"],
     )
 
     exp_logger.log_config(config)
@@ -143,41 +132,41 @@ def run_training(config, run_dir):
     )
 
 
-def main(train=False):
-    config = {
-        # Training params
-        "manual_seed": 42,
-        "num_epochs": 10,
-        "lr": 1e-2,
-        # Model params
-        "model_type": "fno",
-        "modes": 16,
-        "num_fno_layers": 4,
-        "fno_width": 256,
-        "num_fc_layers": 4,
-        "fc_width": 256,
-        "activation_fn": "relu",
-        # Data params
-        "data_dir": "data",
-        "batch_size": 32,
-        "exp_nums": utils.good_run_numbers()[:10],  # None = use all experiments
-        "valid_solutes": None,  # None = keep all solutes
-        "valid_substrates": None,  # None = keep all substrates
-        "valid_temps": None,  # None = keep all temperatures
-        "temporal_subsample": 15,  # Temporal subsampling of profile data
-        "spatial_subsample": 5,
-        "temporal_pad": 128,
-        "axis_symmetric": True,  # split along x axis
-        "use_log_transform": False,
-        "val_ratio": 0.1,
-    }
-    torch.manual_seed(config["manual_seed"])
+# def main(train=False):
+#     config = {
+#         # Training params
+#         "manual_seed": 42,
+#         "num_epochs": 10,
+#         "lr": 1e-2,
+#         # Model params
+#         "model_type": "fno",
+#         "modes": 16,
+#         "num_fno_layers": 4,
+#         "fno_width": 256,
+#         "num_fc_layers": 4,
+#         "fc_width": 256,
+#         "activation_fn": "relu",
+#         # Data params
+#         "data_dir": "data",
+#         "batch_size": 32,
+#         "exp_nums": utils.good_run_numbers()[:10],  # None = use all experiments
+#         "valid_solutes": None,  # None = keep all solutes
+#         "valid_substrates": None,  # None = keep all substrates
+#         "valid_temps": None,  # None = keep all temperatures
+#         "temporal_subsample": 15,  # Temporal subsampling of profile data
+#         "spatial_subsample": 5,
+#         "temporal_pad": 128,
+#         "axis_symmetric": False,  # split along x axis
+#         "use_log_transform": False,
+#         "val_ratio": 0.1,
+#     }
+#     torch.manual_seed(config["manual_seed"])
 
-    run_dir = "test_fno_axis_symmetric"
-    if train:
-        run_training(config, run_dir)
-    visualize.viz_results(run_dir)
+#     run_dir = "test_fno_axis_symmetric"
+#     if train:
+#         run_training(config, run_dir)
+#     visualize.viz_results(run_dir)
 
 
-if __name__ == "__main__":
-    main(train=True)
+# if __name__ == "__main__":
+#     main(train=True)

@@ -3,37 +3,28 @@
     "num_epochs": 10,
     "lr": 0.01,
     "model_type": "fno",
-    "modes": 16,
-    "num_fno_layers": 4,
-    "fno_width": 256,
-    "num_fc_layers": 4,
-    "fc_width": 256,
-    "activation_fn": "relu",
-    "data_dir": "data",
-    "batch_size": 32,
-    "exp_nums": [
-        1,
-        2,
-        3,
-        4,
-        5,
-        6,
-        7,
-        8,
-        9,
-        10
-    ],
-    "valid_solutes": null,
-    "valid_substrates": null,
-    "valid_temps": null,
-    "temporal_subsample": 15,
-    "spatial_subsample": 5,
-    "temporal_pad": 128,
-    "axis_symmetric": true,
-    "use_log_transform": false,
-    "val_ratio": 0.1,
-    "grid_size": 128,
-    "conditioning_dim": 5,
-    "input_dim": 7,
-    "output_dim": 1
+    "data_type": "sim",
+    "model_config": {
+        "modes": 16,
+        "num_fno_layers": 4,
+        "fno_width": 256,
+        "num_fc_layers": 4,
+        "fc_width": 256,
+        "activation_fn": "relu",
+        "grid_size": 214,
+        "conditioning_dim": 3,
+        "input_dim": 5,
+        "output_dim": 1
+    },
+    "data_config": {
+        "data_dir": "data",
+        "batch_size": 32,
+        "simulation_data_path": "data\\simulation_results.pth",
+        "conditioning_keys": [
+            "alpha",
+            "beta",
+            "gamma"
+        ],
+        "val_ratio": 0.1
+    }
 }

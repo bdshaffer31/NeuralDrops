@@ -3,7 +3,7 @@ import torch
 import numpy as np
 
 import logger
-import load_data
+import setup_dataloader
 import run_neural_ode
 import run_fno
 import run_flux_fno
@@ -66,7 +66,7 @@ def viz_results(run_dir):
     train_losses = metrics["train_mse"]
     val_losses = metrics["val_mse"]
 
-    dataset = load_data.setup_data(config)[2]
+    dataset = setup_dataloader.setup_data(config)[2]
 
     if config["model_type"] == "node":
         model = run_neural_ode.load_node_model_from_logger(log_loader)
