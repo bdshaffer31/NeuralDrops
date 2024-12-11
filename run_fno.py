@@ -160,14 +160,14 @@ def main(train=False):
         # Data params
         "data_dir": "data",
         "batch_size": 32,
-        "exp_nums": utils.good_run_numbers()[:10], # None = use all experiments
+        "exp_nums": utils.good_run_numbers()[:10],  # None = use all experiments
         "valid_solutes": None,  # None = keep all solutes
         "valid_substrates": None,  # None = keep all substrates
         "valid_temps": None,  # None = keep all temperatures
         "temporal_subsample": 15,  # Temporal subsampling of profile data
         "spatial_subsample": 5,
         "temporal_pad": 128,
-        "axis_symmetric": True, # split along x axis
+        "axis_symmetric": True,  # split along x axis
         "use_log_transform": False,
         "val_ratio": 0.1,
     }

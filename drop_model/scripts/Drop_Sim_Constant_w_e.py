@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import scipy.integrate as integrate
 from scipy.ndimage import gaussian_filter
 
+
 @dataclass
 class FieldVariables:
     u_grid: np.ndarray  # Radial velocity grid
@@ -34,39 +35,40 @@ class SimulationParams:
     eta: float  # Viscosity (Pa*s)
     d_sigma_dr: float  # Surface tension gradient
 
-    
     # Antoine's Equation
-    A: float  
+    A: float
     B: float
     C: float
 
-    D: float #Diffusvity of Vapor
-    Mw: float #Molecular weight of Vapor
+    D: float  # Diffusvity of Vapor
+    Mw: float  # Molecular weight of Vapor
 
-    Rs: float #Gas Constant
-    T: float #Temperature of drop exterior
-    RH: float #Relative Humidity
+    Rs: float  # Gas Constant
+    T: float  # Temperature of drop exterior
+    RH: float  # Relative Humidity
+
 
 def setup_grids(params: SimulationParams):
     """Set up the grid arrays and initial field values."""
     # Radial and vertical grids
     r = np.linspace(-params.r_c, params.r_c, params.Nr + 1)  # r grid (avoiding r=0)
-    z = np.linspace(0, 1.2*params.hmax0, params.Nz + 1)  # z grid
+    z = np.linspace(0, 1.2 * params.hmax0, params.Nz + 1)  # z grid
 
     # Initialize field arrays
     field_vars = FieldVariables(
-        u_grid=np.zeros((params.Nr  + 1 , params.Nz  + 1)),  # r velocity
-        w_grid=np.zeros((params.Nr  + 1, params.Nz  + 1)),  # z velocity
-        p_grid=np.zeros((params.Nr  + 1)),  # pressure
-        eta_grid=params.eta * np.ones((params.Nr  + 1, params.Nz  + 1)),  # constant viscosity
-        sigma_grid=params.sigma * np.ones((params.Nr  + 1)),  # constant surface tension
-        rho_grid=params.rho * np.ones((params.Nr  + 1, params.Nz  + 1)),  # density
-        diff_grid=params.rho * np.ones((params.Nr  + 1, params.Nz  + 1)),  # diffusivity
-
-        m_dot_grid=np.zeros((params.Nr  + 1)),  # mass loss
+        u_grid=np.zeros((params.Nr + 1, params.Nz + 1)),  # r velocity
+        w_grid=np.zeros((params.Nr + 1, params.Nz + 1)),  # z velocity
+        p_grid=np.zeros((params.Nr + 1)),  # pressure
+        eta_grid=params.eta
+        * np.ones((params.Nr + 1, params.Nz + 1)),  # constant viscosity
+        sigma_grid=params.sigma * np.ones((params.Nr + 1)),  # constant surface tension
+        rho_grid=params.rho * np.ones((params.Nr + 1, params.Nz + 1)),  # density
+        diff_grid=params.rho * np.ones((params.Nr + 1, params.Nz + 1)),  # diffusivity
+        m_dot_grid=np.zeros((params.Nr + 1)),  # mass loss
     )
 
     return r, z, field_vars
+
 
 def setup_cap_initial_h_profile(r, h0, r_c):
     # setup a spherical cap initial height profile
@@ -75,6 +77,7 @@ def setup_cap_initial_h_profile(r, h0, r_c):
     h = np.sqrt((2.0 * R * (r + R) - np.square(r + R))) - (R - h0)
 
     return h
+
 
 def setup_parabolic_initial_h_profile(r, h0, r_c, drop_fraction=1.0, order=4):
     # setup up a polynomial initial drop profile
@@ -86,15 +89,18 @@ def setup_parabolic_initial_h_profile(r, h0, r_c, drop_fraction=1.0, order=4):
     )
     return h
 
+
 def as_grad(x, dx):
     """Axis symmetric gradient (left side neumann boundary condition)"""
     grad_x = np.gradient(x, dx, edge_order=2)
     return grad_x
 
+
 def calc_curvature(params, r, z, field_vars, h):
     dh_dr = as_grad(h, params.dr)
     curvature_term = (r * dh_dr) / np.sqrt(1 + dh_dr**2)
     return curvature_term
+
 
 def calc_pressure(params, r, z, field_vars, h):
     """Compute the radial pressure gradient using the nonlinear curvature formula."""
@@ -104,14 +110,23 @@ def calc_pressure(params, r, z, field_vars, h):
     d_curvature_dr = as_grad(curvature_term, params.dr)
     Laplace_pressure = -params.sigma * (1 / r) * d_curvature_dr
 
-    h_star = params.hmax0/100
+    h_star = params.hmax0 / 100
     n = 3
     m = 2
-    theta_e = 2*np.arctan(params.hmax0/params.r_c)
-    dis_press = -params.sigma*np.square(theta_e)*(n-1)*(m-1)/(n-m)/(2*h_star)*((h_star/params.hmax0)**n-(h_star/params.hmax0)**m)
+    theta_e = 2 * np.arctan(params.hmax0 / params.r_c)
+    dis_press = (
+        -params.sigma
+        * np.square(theta_e)
+        * (n - 1)
+        * (m - 1)
+        / (n - m)
+        / (2 * h_star)
+        * ((h_star / params.hmax0) ** n - (h_star / params.hmax0) ** m)
+    )
 
-    pressure = Laplace_pressure #+ dis_press
+    pressure = Laplace_pressure  # + dis_press
     return pressure
+
 
 def calc_curvature_v2(params, r, z, field_vars, h):
     dh_dr = as_grad(h, params.dr)
@@ -119,11 +134,13 @@ def calc_curvature_v2(params, r, z, field_vars, h):
     curvature_term = np.abs(d2h_dr2) / np.sqrt(1 + dh_dr**2) ** 3
     return curvature_term
 
+
 def calc_pressure_v2(params, r, z, field_vars, h):
     """Compute the radial pressure gradient using the nonlinear curvature formula."""
     curvature_term = calc_curvature_v2(params, r, z, field_vars, h)
     pressure = curvature_term * params.sigma * 2
     return pressure
+
 
 def interp_h_mask_grid(grid_data, h, z):
     dz = z[1] - z[0]
@@ -141,6 +158,7 @@ def interp_h_mask_grid(grid_data, h, z):
             masked_grid[i, :] = 0
     return masked_grid
 
+
 def compute_u_velocity(params, r, z, field_vars, h):
     """Compute radial velocity u(r, z, t) using the given equation."""
     u_grid = np.zeros_like(field_vars.u_grid)
@@ -155,6 +173,7 @@ def compute_u_velocity(params, r, z, field_vars, h):
 
     return u_grid
 
+
 def compute_w_velocity(params, r, z, field_vars, h):
     w_grid = np.zeros_like(field_vars.w_grid)
     ur_grid = field_vars.u_grid * r[:, None]
@@ -165,6 +184,7 @@ def compute_w_velocity(params, r, z, field_vars, h):
     w_grid = interp_h_mask_grid(w_grid, h, z)
     w_grid[0, :] = w_grid[1, :]  # hack to deal with numerical issues at r ~ 0
     return w_grid
+
 
 def calculate_dh_dt(t, params, r, z, field_vars, h):
     """Calculate dh/dt from u velocities for integration with solve_ivp"""
@@ -188,6 +208,7 @@ def calculate_dh_dt(t, params, r, z, field_vars, h):
 
     return dh_dt
 
+
 def run_forward_euler_simulation(params, r, z, field_vars, h0):
     h_profiles = [h0.copy()]
     h = h0.copy()
@@ -201,6 +222,7 @@ def run_forward_euler_simulation(params, r, z, field_vars, h0):
 
     h_profiles = np.array(h_profiles)
     return h_profiles
+
 
 def plot_height_profile_evolution(r, h_profiles, params, n_lines=5):
     """Plot the evolution of the height profile over time."""
@@ -230,7 +252,7 @@ def inspect(params, r, z, field_vars, h):
     dp_dr = as_grad(pressure, params.dr)
 
     u_grid = compute_u_velocity(params, r, z, field_vars, h)
-    integral_u_r = np.trapz(r[:, None] * u_grid, dx=params.dz, axis=1) +1.0e-8
+    integral_u_r = np.trapz(r[:, None] * u_grid, dx=params.dz, axis=1) + 1.0e-8
     grad_u_r = as_grad(integral_u_r, params.dr)
     radial_term = (-1 / r) * grad_u_r
     dh_dt = radial_term + params.w_e
@@ -254,9 +276,7 @@ def inspect(params, r, z, field_vars, h):
     plt.show()
 
     plt.plot(pressure, label="pressure")
-    plt.title(
-        f"p max: {np.max(np.abs(pressure))}, std: {np.std(pressure)}"
-    )
+    plt.title(f"p max: {np.max(np.abs(pressure))}, std: {np.std(pressure)}")
     plt.legend()
     plt.show()
 
@@ -339,32 +359,29 @@ def run():
         Nr=199,  # Number of radial points
         Nz=111,  # Number of z-axis points
         Nt=10,  # Number of time steps
-        dr= 2.0 * 1e-3 / 699,  # Radial grid spacing
+        dr=2.0 * 1e-3 / 699,  # Radial grid spacing
         dz=5e-4 / 111,  # Vertical grid spacing
         dt=1e-5,  # Time step size eg 1e-5
         rho=1,  # Density of the liquid (kg/m^3) eg 1
-        w_e=-1e-3, # -1e-3,  # Constant evaporation rate (m/s) eg 1e-4
+        w_e=-1e-3,  # -1e-3,  # Constant evaporation rate (m/s) eg 1e-4
         sigma=0.072,  # Surface tension (N/m) eg 0.072
         eta=1e-3,  # Viscosity (Pa*s) eg 1e-3
         d_sigma_dr=0.0,  # Surface tension gradient
-
-        A = 8.07131, # Antoine Equation (-)
-        B = 1730.63, # Antoine Equation (-)
-        C = 233.4, # Antoine Equation (-)
-        D = 2.42e-5, # Diffusivity of H2O in Air (m^2/s)
-        Mw = 0.018, # Molecular weight H2O vapor (kg/mol)
-        Rs = 8.314, # Gas Constant (J/(K*mol))
-        T = 293.15, # Ambient Temperature (K)
-        RH = 0.20, # Relative Humidity (-)
+        A=8.07131,  # Antoine Equation (-)
+        B=1730.63,  # Antoine Equation (-)
+        C=233.4,  # Antoine Equation (-)
+        D=2.42e-5,  # Diffusivity of H2O in Air (m^2/s)
+        Mw=0.018,  # Molecular weight H2O vapor (kg/mol)
+        Rs=8.314,  # Gas Constant (J/(K*mol))
+        T=293.15,  # Ambient Temperature (K)
+        RH=0.20,  # Relative Humidity (-)
     )
 
     # Initialize the grids and field variables
     r, z, field_vars = setup_grids(params)
 
     # run simulation and plot final profile
-    h_0 = setup_parabolic_initial_h_profile(
-        r, params.hmax0, params.r_c
-    )
+    h_0 = setup_parabolic_initial_h_profile(r, params.hmax0, params.r_c)
     h_profiles = eval(params, r, z, field_vars, h_0.copy())
 
     # plot the velocity profile and
