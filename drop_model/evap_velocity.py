@@ -146,8 +146,6 @@ params = SimulationParams(
 r, z, field_vars = setup_grids(params)
 h = setup_cap_initial_h_profile(r, params.hmax0, params.r_c)
 
-m_dot = mass_loss(r,20/180*np.pi)
-
 m_dot = mass_loss(r,20.0*np.pi/180.0)
 print(m_dot)
 plt.plot(r,m_dot)
@@ -157,3 +155,15 @@ w_e = evap_velocity(m_dot,h)
 
 plt.plot(r,w_e)
 plt.show()
+
+res = list(map(lambda i: i < 0.6 * params.hmax0, h)).index(True)
+
+print ('The index of element just greater than 0.6 : ' + str(res))
+
+import numpy as np
+
+a = np.array([2, 23, 15, 7, 9, 11, 17, 19, 5, 3])
+print(a)
+
+a[3:] = 0
+print(a)
