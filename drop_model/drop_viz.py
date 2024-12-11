@@ -54,9 +54,9 @@ def plot_height_profile_evolution(r, h_profiles, params, n_lines=5):
     """Plot the evolution of the height profile over time."""
     plt.figure(figsize=(6, 4))
     for i, h_t in enumerate(h_profiles[::50]):
-        plt.plot(r * 1e-3, h_t * 1e-3, c="dimgrey")
-    plt.plot(r * 1e-3, h_profiles[0] * 1e-3, c="k", label="h0")
-    plt.plot(r * 1e-3, h_profiles[-1] * 1e-3, c="r", label="Final")
+        plt.plot(r * 1e3, h_t * 1e3, c="dimgrey")
+    plt.plot(r * 1e3, h_profiles[0] * 1e3, c="k", label="h0")
+    plt.plot(r * 1e3, h_profiles[-1] * 1e3, c="r", label="Final")
     plt.xlabel("Radius (mm)")
     plt.ylabel("Height (mm)")
     plt.legend()

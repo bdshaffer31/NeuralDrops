@@ -142,31 +142,38 @@ def main():
     torch.set_default_dtype(torch.float64)
 
     from load_data import ProfileDataset
-    dataset = ProfileDataset("data", [40], axis_symmetric=False, spatial_subsample=6, temporal_subsample=24)
+    dataset = ProfileDataset("data", [48], axis_symmetric=False, spatial_subsample=5, temporal_subsample=24)
     viz_file = dataset.valid_files[0]
-    h_0 = dataset.data[viz_file]["profile"][1]
+    h_0 = dataset.data[viz_file]["profile"][10]
+    print(h_0)
     h_0 = dataset.profile_scaler.inverse_apply(h_0)
+    print(h_0)
     print(torch.max(h_0), torch.min(h_0))
     h_0 -= torch.min(h_0)
+    print(h_0)
     h_0 /= torch.max(h_0)
+    print(h_0)
     h_0 -= 0.5
-    h_0 = torch.max(torch.zeros_like(h_0), h_0)
-    h_0 *= 0.0003 * 100
-    r_c = 0.0003 * 640
+    print(h_0)
+    h_0 = torch.max(torch.zeros_like(h_0), h_0)/1000
+    print(h_0)
+    r_c = 0.000003 * 256
     maxh0 = torch.max(h_0).item() * 1.2
-    print(h_0.shape, maxh0, print(r_c))
+    print(h_0.shape, maxh0)
+    print(0.000003*220)
+    print(r_c)
 
     # TODO consider doing something different with these
     params = utils.SimulationParams(
         r_c=r_c,  # Radius of the droplet in meters
         hmax0=maxh0,  # Initial droplet height at the center in meters
-        Nr=214,  # Number of radial points
+        Nr=256,  # Number of radial points
         Nz=110,  # Number of z-axis points
-        dr=2 * r_c / (214 - 1),  # Radial grid spacing
+        dr= 2 * r_c / (256 - 1),  # Radial grid spacing
         dz=maxh0 / (110 - 1),  # Vertical grid spacing
         rho=1,  # Density of the liquid (kg/m^3) eg 1
         sigma=0.072,  # Surface tension (N/m) eg 0.072
-        eta=1e-5,  # Viscosity (Pa*s) eg 1e-3
+        eta=1e-3,  # Viscosity (Pa*s) eg 1e-3
     )
     # params = utils.SimulationParams(
     #     r_c=1e-2,  # Radius of the droplet in meters
@@ -179,18 +186,18 @@ def main():
     #     sigma=0.072,  # Surface tension (N/m) eg 0.072
     #     eta=1e-5,  # Viscosity (Pa*s) eg 1e-3
     # )
-    Nt = 500
+    Nt = 1000
     dt = 1e-5
     t_lin = torch.linspace(0, dt * Nt, Nt)
 
-    def evap_model(h, kappa=1e0):
+    def evap_model(h, kappa=0e-3):
         return -kappa * torch.ones_like(h)
 
     drop_model = PureDropModel(params, evap_model=evap_model, sigma=10)
 
-    # h_0 = utils.setup_parabolic_initial_h_profile(
-    #     drop_model.r, 0.8 * params.hmax0, params.r_c, order=4
-    # )
+    #h_0 = utils.setup_parabolic_initial_h_profile(
+    #    drop_model.r, 0.8 * params.hmax0, params.r_c, order=4
+    #)
 
 
 
