@@ -289,7 +289,9 @@ class ProfileDataset(Dataset):
         # apply detrending, centering, padding here
         profile, _ = utils.detrend_dataset(profile, last_n=50, window_size=50)
         profile = utils.smooth_profile(profile)
-        profile = utils.pad_profile(profile, self.temporal_pad * self.temporal_subsample)
+        profile = utils.pad_profile(
+            profile, self.temporal_pad * self.temporal_subsample
+        )
         profile = utils.vertical_crop_profile(profile, 0.78)
         profile = utils.center_data(profile)
         # if we want the axis symmetric data (half of the profile only)

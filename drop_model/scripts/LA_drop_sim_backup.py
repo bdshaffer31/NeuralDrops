@@ -3,7 +3,8 @@ from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
 from dataclasses import dataclass
 
-from scipy.ndimage import gaussian_filter
+from scipy.optimize import root
+from scipy.ndimage import gaussian_filter, median_filter
 
 
 @dataclass
@@ -37,7 +38,9 @@ class SimulationParams:
 def setup_grids(params: SimulationParams):
     """Set up the grid arrays and initial field values."""
     # Radial and vertical grids
-    r = np.linspace(params.dr, params.r_c, params.Nr)  # r grid (avoiding r=0)
+    # r = np.linspace(params.dr, params.r_c, params.Nr)  # r grid (avoiding r=0)
+    r = np.linspace(-params.r_c, params.r_c, params.Nr)  # r grid (avoiding r=0)
+    # r = np.linspace(0, params.r_c, params.Nr)  # r grid (not avoiding r=0)
     z = np.linspace(0, params.hmax0, params.Nz)  # z grid
 
     # Initialize field arrays
@@ -76,31 +79,39 @@ def setup_cap_initial_h_profile(r, h0, r_c):
 
 def as_grad(x, dx):
     """Axis symmetric gradient (left side neumann boundary condition)"""
+    # not used
     x_padded = np.pad(x, (1, 0), mode="edge")
     grad_x = np.gradient(x_padded, dx, edge_order=2)
     return grad_x[1:]
 
-# def as_grad(x, dx):
-#     """Axis symmetric gradient (left side neumann boundary condition)"""
-#     grad_x = np.gradient(x, dx, edge_order=2)
-#     return grad_x
 
-def central_diff_4th_order(x, dx):
-    kernel = np.array([-1, 8, 0, -8, 1]) / (12 * dx)
-    derivative = np.convolve(x, kernel, mode="same")
-    return derivative
+def grad(x, dx):
+    return np.gradient(x, dx, edge_order=2)
+
 
 def calc_curvature(params, r, z, field_vars, h):
-    dh_dr = as_grad(h, params.dr)
-    curvature_term = (r * dh_dr) / np.sqrt(1 + dh_dr**2)
+    dh_dr = grad(h, params.dr)
+    # epsilon = 1e-6
+    epsilon = 0.0
+    curvature_term = (r * dh_dr) / (np.sqrt(1 + dh_dr**2) + epsilon)
     return curvature_term
 
 
-def calc_curvature_v2(params, r, z, field_vars, h):
-    dh_dr = as_grad(h, params.dr)
-    d2h_dr2 = as_grad(dh_dr, params.dr)
-    curvature_term = np.abs(d2h_dr2) / np.sqrt(1 + dh_dr**2) ** 3
-    return curvature_term
+# def safe_inv(r, epsilon=1e-6):
+#     div_r = np.zeros_like(r)
+#     mask = np.abs(r) > epsilon
+#     div_r[mask] = 1 / r[mask]
+#     div_r[~mask] = 1 / epsilon
+#     return div_r
+
+
+def safe_inv(r):
+    return 1 / r
+
+
+# def safe_inv(r, epsilon=1e-6):
+#     safe_r = np.where(np.abs(r) > epsilon, r, epsilon)
+#     return 1 / safe_r
 
 
 def calc_pressure(params, r, z, field_vars, h):
@@ -108,15 +119,9 @@ def calc_pressure(params, r, z, field_vars, h):
     # using Diddens implementation
     # note, square root should be approximated as unity in the limit h -> 0
     curvature_term = calc_curvature(params, r, z, field_vars, h)
-    d_curvature_dr = as_grad(curvature_term, params.dr)
-    pressure = -params.sigma * (1 / r) * d_curvature_dr
-    return pressure
-
-
-def calc_pressure_v2(params, r, z, field_vars, h):
-    """Compute the radial pressure gradient using the nonlinear curvature formula."""
-    curvature_term = calc_curvature_v2(params, r, z, field_vars, h)
-    pressure = curvature_term * params.sigma * 2
+    d_curvature_dr = grad(curvature_term, params.dr)
+    # pressure = -params.sigma * (1 / r) * d_curvature_dr
+    pressure = -params.sigma * safe_inv(r) * d_curvature_dr
     return pressure
 
 
@@ -124,7 +129,7 @@ def compute_u_velocity(params, r, z, field_vars, h):
     """Compute radial velocity u(r, z, t) using the given equation."""
     u_grid = np.zeros_like(field_vars.u_grid)
     pressure = calc_pressure(params, r, z, field_vars, h)
-    dp_dr = as_grad(pressure, params.dr)
+    dp_dr = grad(pressure, params.dr)
     for i in range(len(r)):
         h_r = h[i]
         for j, z_val in enumerate(z):
@@ -139,7 +144,8 @@ def compute_w_velocity(params, r, z, field_vars, h):
     w_grid = np.zeros_like(field_vars.w_grid)
     ur_grid = field_vars.u_grid * r[:, None]
     d_ur_grid_dr = np.gradient(ur_grid, params.dr, axis=0)
-    integrand = (1 / r[:, None]) * d_ur_grid_dr
+    div_r = safe_inv(r)
+    integrand = div_r[:, None] * d_ur_grid_dr
     for j in range(1, len(z)):  # ignore BC
         w_grid[:, j] = -1 * np.trapz(integrand[:, : j + 1], dx=params.dz, axis=1)
     w_grid = interp_h_mask_grid(w_grid, h, z)
@@ -183,25 +189,17 @@ def calculate_dh_dt(t, params, r, z, field_vars, h):
     u_grid = compute_u_velocity(params, r, z, field_vars, h)
 
     # Integrate r * u over z from 0 to h for each radial position
-    integral_u_r = np.trapz(r[:, None] * u_grid, dx=params.dz, axis=1)
-    # TODO scaling??
+    integral_u_r = np.trapz(r[:, None] * u_grid, dx=params.dz, axis=1) + 1e-8
     integral_u_r *= params.dz
-    grad_u_r = as_grad(integral_u_r, params.dr)
+    grad_u_r = np.gradient(integral_u_r, params.dr)
     grad_u_r = gaussian_filter(grad_u_r, sigma=10)
 
     # Calculate dh/dt as radial term plus evaporation rate
-    radial_term = (-1 / r) * grad_u_r
-    # TODO bcs
-    # radial_term[0] = radial_term[3]
-    # radial_term[1] = radial_term[3]
-    # radial_term[2] = radial_term[3]
-    radial_term = infill_first_three_values(radial_term, 2)
-    # TODO negative sign
+    radial_term = -1 * safe_inv(r) * grad_u_r
     dh_dt = radial_term + params.w_e
-    # dh_dt = -1 * radial_term + params.w_e
+    # dh_dt = radial_term + r**2 * params.w_e / params.dr**2 # spoof an interesting evap
 
     return dh_dt
-
 
 
 def run_forward_euler_simulation(params, r, z, field_vars, h0):
@@ -213,6 +211,34 @@ def run_forward_euler_simulation(params, r, z, field_vars, h0):
         dh_dt = calculate_dh_dt(t * params.dt, params, r, z, field_vars, h)
         h = h + params.dt * dh_dt  # Forward Euler step
         h = np.maximum(h, 0)  # Ensure non-negative height
+        h_profiles.append(h.copy())
+
+    h_profiles = np.array(h_profiles)
+    return h_profiles
+
+
+def run_backward_euler_simulation(params, r, z, field_vars, h0):
+    h_profiles = [h0.copy()]
+    h = h0.copy()
+
+    for t in range(params.Nt):
+        print(t, end="\r")
+
+        def implicit_function(h_next):
+            dh_dt = calculate_dh_dt(
+                (t + 1) * params.dt, params, r, z, field_vars, h_next
+            )
+            return h_next - h - params.dt * dh_dt
+
+        result = root(implicit_function, h, method="hybr", options={"maxfev": 20})
+
+        if result.success:
+            h = result.x
+        else:
+            print("did not converge")
+            h = result.x
+            # raise RuntimeError(f"Implicit solver failed to converge at time step {t}")
+        h = np.maximum(h, 0)
         h_profiles.append(h.copy())
 
     h_profiles = np.array(h_profiles)
@@ -236,7 +262,6 @@ def run_BDF_simulation(params, r, z, field_vars, h0):
     return h_profiles
 
 
-# TODO use actual params
 def plot_height_profile_evolution(r, h_profiles, params, n_lines=5):
     """Plot the evolution of the height profile over time."""
     plt.figure(figsize=(10, 6))
@@ -258,19 +283,19 @@ def eval(params, r, z, field_vars, h0):
 
 
 def inspect(params, r, z, field_vars, h):
-    dh_dr = as_grad(h, params.dr)
+    dh_dr = grad(h, params.dr)
     curvature_term = (r * dh_dr) / np.sqrt(1 + dh_dr**2)
-    d_curvature_dr = as_grad(curvature_term, params.dr)
+    d_curvature_dr = grad(curvature_term, params.dr)
     pressure = calc_pressure(params, r, z, field_vars, h)
-    dp_dr = as_grad(pressure, params.dr)
+    dp_dr = grad(pressure, params.dr)
+    dp_dr[1] = dp_dr[0] + (dp_dr[2] - dp_dr[0]) / 2
 
     u_grid = compute_u_velocity(params, r, z, field_vars, h)
     integral_u_r = np.trapz(r[:, None] * u_grid, dx=params.dz, axis=1)
-    grad_u_r = as_grad(integral_u_r, params.dr)
-    radial_term = (-1 / r) * grad_u_r
-    radial_term[0] = radial_term[3]
-    radial_term[1] = radial_term[3]
-    radial_term[2] = radial_term[3]
+    grad_u_r = grad(integral_u_r, params.dr)
+    # grad_u_r = np.gradient(integral_u_r, params.dr)
+    # radial_term = (-1 / r) * grad_u_r
+    radial_term = -1 * safe_inv(r) * grad_u_r
     dh_dt = radial_term + params.w_e
 
     # plt.plot(h / np.max(np.abs(h)), label="h")
@@ -359,16 +384,16 @@ def run():
     params = SimulationParams(
         r_c=1e-3,  # Radius of the droplet in meters
         hmax0=5e-4,  # Initial droplet height at the center in meters
-        Nr=200,  # Number of radial points
+        Nr=204,  # Number of radial points
         Nz=110,  # Number of z-axis points
-        Nt=100,  # Number of time steps
-        dr=1e-3 / 200,  # Radial grid spacing
-        dz=5e-4 / 110,  # Vertical grid spacing
-        dt=5e-5,  # Time step size eg 1e-5
+        Nt=1000,  # Number of time steps
+        dr=2 * 5e-3 / (204 - 1),  # Radial grid spacing
+        dz=3e-4 / (110 - 1),  # Vertical grid spacing
+        dt=1e-2,  # Time step size eg 1e-5
         rho=1,  # Density of the liquid (kg/m^3) eg 1
-        w_e=0.0,  # -1e-3,  # Constant evaporation rate (m/s) eg 1e-4
+        w_e=-1e-5,  # -1e-3,  # Constant evaporation rate (m/s) eg 1e-4
         sigma=0.072,  # Surface tension (N/m) eg 0.072
-        eta=1e-3,  # Viscosity (Pa*s) eg 1e-3
+        eta=1e-5,  # Viscosity (Pa*s) eg 1e-3
         d_sigma_dr=0.0,  # Surface tension gradient
     )
 
@@ -377,13 +402,16 @@ def run():
 
     # run simulation and plot final profile
     h_0 = setup_parabolic_initial_h_profile(
-        r, params.hmax0, params.r_c, drop_fraction=1.0, order=4
+        r, 0.8 * params.hmax0, params.r_c, drop_fraction=1.0, order=4
     )
+    # h_0 = setup_cap_initial_h_profile(r, 0.8*params.hmax0, params.r_c)
     h_profiles = eval(params, r, z, field_vars, h_0.copy())
 
     # plot the velocity profile and
     inspect(params, r, z, field_vars, h_profiles[-1].copy())
     plot_velocity(params, r, z, field_vars, h_profiles[-1].copy())
+    inspect(params, r, z, field_vars, h_profiles[0].copy())
+    plot_velocity(params, r, z, field_vars, h_profiles[0].copy())
 
 
 if __name__ == "__main__":

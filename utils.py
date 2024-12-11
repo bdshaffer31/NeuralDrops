@@ -9,11 +9,14 @@ from scipy.ndimage import median_filter, gaussian_filter
 
 
 def good_run_numbers():
-    all_run_numbers = list(range(1,51))
-    bad_run_numbers = [20,21,22,28,29,30,29,43,41,32,31,30,26,24]
+    all_run_numbers = list(range(1, 51))
+    bad_run_numbers = [20, 21, 22, 28, 29, 30, 29, 43, 41, 32, 31, 30, 26, 24]
     bad_run_numbers_set = set(bad_run_numbers)
-    good_run_numbers = [run for run in all_run_numbers if run not in bad_run_numbers_set]
+    good_run_numbers = [
+        run for run in all_run_numbers if run not in bad_run_numbers_set
+    ]
     return good_run_numbers
+
 
 def load_single_mat_file(filename):
     contents = scipy.io.loadmat(filename)
@@ -79,9 +82,11 @@ def load_test_mat_file(filename="data\Test_Drop_Boundary.mat"):
     torch_data = torch.tensor(processed_data)
     return torch_data
 
+
 def central_split_data(dataset):
     x_size = dataset.shape[1]
-    return dataset[:,x_size//2:]
+    return dataset[:, x_size // 2 :]
+
 
 def detrend_dataset(dataset, last_n=100, window_size=10):
     # Compute the average profile across all images (along the image stack dimension)
