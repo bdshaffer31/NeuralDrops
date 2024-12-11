@@ -104,7 +104,7 @@ def calc_pressure(params, r, z, field_vars, h):
     d_curvature_dr = as_grad(curvature_term, params.dr)
     Laplace_pressure = -params.sigma * (1 / r) * d_curvature_dr
 
-    h_star = params.hmax0/100
+    h_star = params.hmax0/90
     n = 3
     m = 2
     theta_e = 2*np.arctan(params.hmax0/params.r_c)
@@ -166,6 +166,56 @@ def compute_w_velocity(params, r, z, field_vars, h):
     w_grid[0, :] = w_grid[1, :]  # hack to deal with numerical issues at r ~ 0
     return w_grid
 
+def mass_loss_tracked_r_c(params, r , h):
+
+    def mass_loss (params, r_in, theta, R_c):
+        p_sat = 10**(params.A-params.B/(params.C+params.T-273.15)) #Antoine's Equation
+        p_sat = p_sat/760.0*101325.0 # conversion (mmHg) to (Pa)
+        #print(p_sat)
+
+        #R_c = params.r_c #TODO
+        b_c = 1.0 #TODO
+        J_delta = 0 #Contribution from nonhomogenous surface concentration (multi-phase drops)
+
+        cosh_alpha = np.zeros_like(r_in)
+        
+        cosh_alpha[1:-1] = (r_in[1:-1]**2*np.cos(theta) + R_c*np.sqrt(np.square(R_c)-np.square(r_in[1:-1])*np.square(np.sin(theta))))/(np.square(R_c)-np.square(r_in[1:-1]))
+
+        integral = np.zeros_like(r_in)
+        for i in range(1,len(r_in)-1):
+            integral[i] , err = integrate.quad(lambda x:
+                                               np.tanh(np.pi*x/(2.0*np.pi-2.0*theta))/
+                                               (np.cosh(np.pi*x/(2.0*np.pi-2.0*theta))*np.sqrt(np.cosh(x)-cosh_alpha[i]))
+                                               , np.arccosh(cosh_alpha[i]) , np.inf)
+
+        N_prime_alpha = np.sqrt(2)*np.power(np.sqrt((cosh_alpha+np.cos(theta))),3)
+        J_c = np.pi*N_prime_alpha*integral/(2*np.sqrt(2)*np.square(np.pi-theta))
+        #J_c[-1]=J_c[-2]*2
+        #J_c[0]=J_c[1]*2
+
+        J_c[-1]=J_c[-2]
+        J_c[0]=J_c[1]
+
+        J_term = (b_c - params.RH)*J_c + J_delta
+
+        m_dot = params.D*params.Mw*p_sat/(params.Rs*params.T*R_c)*J_term
+        return m_dot
+    
+    h_max_current = np.max(h)
+    num_c = list(map(lambda i: i > 0.01 * params.hmax0, h)).index(True)
+    r_c_current = - r[num_c]
+    theta_current = 2*np.arctan(h_max_current/r_c_current)
+    
+    m_dot = np.zeros_like(r)
+    m_dot[num_c:-num_c] = mass_loss(params, r[num_c:-num_c], theta_current, r_c_current)
+    
+    return m_dot
+
+def evap_velocity (params, m_dot, h):
+    dh_dr = as_grad(h,params.dr)
+    w_e = -m_dot/params.rho* np.sqrt(1 + np.square(dh_dr))
+    return w_e
+
 def calculate_dh_dt(t, params, r, z, field_vars, h):
     """Calculate dh/dt from u velocities for integration with solve_ivp"""
     h = h.reshape(len(r))
@@ -182,9 +232,11 @@ def calculate_dh_dt(t, params, r, z, field_vars, h):
 
     # Calculate dh/dt as radial term plus evaporation rate
     radial_term = (-1 / r) * grad_u_r
-    # TODO negative sign
-    dh_dt = radial_term + params.w_e
-    # dh_dt = -1 * radial_term + params.w_e
+
+    m_dot = mass_loss_tracked_r_c(params, r , h)
+    w_e = evap_velocity(params, m_dot, h)
+
+    dh_dt = radial_term + w_e
 
     return dh_dt
 
@@ -233,7 +285,11 @@ def inspect(params, r, z, field_vars, h):
     integral_u_r = np.trapz(r[:, None] * u_grid, dx=params.dz, axis=1) +1.0e-8
     grad_u_r = as_grad(integral_u_r, params.dr)
     radial_term = (-1 / r) * grad_u_r
-    dh_dt = radial_term + params.w_e
+
+    m_dot = mass_loss_tracked_r_c(params, r , h)
+    w_e = evap_velocity(params, m_dot, h)
+
+    dh_dt = radial_term + w_e
 
     # plt.plot(h / np.max(np.abs(h)), label="h")
     plt.plot(h, label="h")
@@ -279,6 +335,14 @@ def inspect(params, r, z, field_vars, h):
     plt.legend()
     plt.show()
 
+    plt.plot(m_dot, label="mass_loss")
+    plt.legend()
+    plt.show()
+
+    plt.plot(w_e, label="Evap_velocity")
+    plt.legend()
+    plt.show()
+
     plt.plot(dh_dt, label="dh_dt")
     plt.legend()
     plt.show()
@@ -299,7 +363,7 @@ def plot_velocity(params, r, z, field_vars, h):
         aspect="auto",
         origin="lower",
         extent=[-params.r_c, params.r_c, 0, np.max(z)],
-        cmap="viridis",
+        cmap="viridis", vmin = 0.0, vmax = 0.02,
     )
     plt.plot(
         r, h, color="red", linewidth=2, label="Height profile $h(r)$"
@@ -318,7 +382,7 @@ def plot_velocity(params, r, z, field_vars, h):
         aspect="auto",
         origin="lower",
         extent=[-params.r_c, params.r_c, 0, np.max(z)],
-        cmap="viridis",
+        cmap="viridis",  vmin = 0.0, vmax = 0.01,
     )
     plt.plot(
         r, h, color="red", linewidth=2, label="Height profile $h(r)$"
@@ -335,15 +399,15 @@ def run():
     # Define the simulation parameters
     params = SimulationParams(
         r_c=1e-3,  # Radius of the droplet in meters
-        hmax0=5e-4,  # Initial droplet height at the center in meters
-        Nr=199,  # Number of radial points
+        hmax0=3e-4,  # Initial droplet height at the center in meters
+        Nr=203,  # Number of radial points
         Nz=111,  # Number of z-axis points
-        Nt=10,  # Number of time steps
-        dr= 2.0 * 1e-3 / 699,  # Radial grid spacing
-        dz=5e-4 / 111,  # Vertical grid spacing
-        dt=1e-5,  # Time step size eg 1e-5
+        Nt=100,  # Number of time steps
+        dr= 2.0 * 1e-3 / 203,  # Radial grid spacing
+        dz=3e-4 / 111,  # Vertical grid spacing
+        dt=1e-4,  # Time step size eg 1e-5
         rho=1,  # Density of the liquid (kg/m^3) eg 1
-        w_e=-1e-3, # -1e-3,  # Constant evaporation rate (m/s) eg 1e-4
+        w_e=-1e-4, # -1e-3,  # Constant evaporation rate (m/s) eg 1e-4
         sigma=0.072,  # Surface tension (N/m) eg 0.072
         eta=1e-3,  # Viscosity (Pa*s) eg 1e-3
         d_sigma_dr=0.0,  # Surface tension gradient
@@ -362,7 +426,7 @@ def run():
     r, z, field_vars = setup_grids(params)
 
     # run simulation and plot final profile
-    h_0 = setup_parabolic_initial_h_profile(
+    h_0 = setup_cap_initial_h_profile(
         r, params.hmax0, params.r_c
     )
     h_profiles = eval(params, r, z, field_vars, h_0.copy())
