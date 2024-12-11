@@ -1,14 +1,13 @@
 import torch
-import drop_model.utils as utils
 
 
 class PureDropModel:
-    def __init__(self, params, evap_model=None, sigma=10):
+    def __init__(self, params, evap_model=None, smoothing_fn=None):
         # Initialize with a height profile and a params object
         self.params = params
         self.r, self.z = self.setup_grids()
         self.evap_model = evap_model
-        self.sigma = sigma
+        self.smoothing_fn = smoothing_fn
 
     def setup_grids(self):
         r = torch.linspace(
@@ -35,7 +34,7 @@ class PureDropModel:
     def calc_pressure(self, h):
         curvature_term = self.calc_curvature(h)
         d_curvature_dr = self.grad(curvature_term, self.params.dr)
-        pressure = -self.params.sigma * self.safe_inv(self.r) * d_curvature_dr
+        pressure = -self.params.sigma * self.safe_inv(self.r, 0.0) * d_curvature_dr
         return pressure
 
     # u velocity calculation
@@ -70,14 +69,10 @@ class PureDropModel:
         d_ur_grid_dr = torch.gradient(ur_grid, spacing=self.params.dr, dim=0)[0]
         div_r = self.safe_inv(self.r).unsqueeze(1)  # Shape: (Nr, 1)
         integrand = div_r * d_ur_grid_dr
-
-        # Integrate along z dimension
         w_grid[:, 1:] = -torch.cumsum(
             (integrand[:, :-1] + integrand[:, 1:]) * 0.5 * self.params.dz, dim=1
         )
-
         w_grid = self.interp_h_mask_grid(w_grid, h, self.z)
-        w_grid[0, :] = w_grid[1, :]  # Hack to deal with numerical issues at r ~ 0
         return w_grid
 
     def interp_h_mask_grid(self, grid_data, h, z):
@@ -101,10 +96,10 @@ class PureDropModel:
 
         return masked_grid
 
-    def fourier_projection(self, h, num_frequencies=10):
-        fft_coeffs = torch.fft.fft(h)
-        fft_coeffs[num_frequencies + 1 : -num_frequencies] = 0
-        return torch.fft.ifft(fft_coeffs).real
+    def apply_smoothing_fn(self, x):
+        if self.smoothing_fn is None:
+            return x
+        return self.smoothing_fn(x)
 
     # Flow-induced dh/dt calculation
     def calc_flow_dh_dt(self, h):
@@ -115,12 +110,9 @@ class PureDropModel:
             self.r.unsqueeze(1) * u_grid, dx=self.params.dz, dim=1
         )
         grad_u_r = self.grad(integral_u_r, self.params.dr) * self.params.dz
-
-        # Blur to smooth using Gaussian filter
-        grad_u_r = utils.gaussian_blur_1d(grad_u_r, sigma=self.sigma)
-        # NOTE: this seems to work much better than blurring
-        # grad_u_r = self.fourier_projection(grad_u_r, 6)
+        grad_u_r = self.apply_smoothing_fn(grad_u_r)
         flow_dh_dt = -self.safe_inv(self.r) * grad_u_r
+
         return flow_dh_dt
 
     # Evaporation-induced dh/dt calculation
@@ -142,7 +134,10 @@ def main():
     torch.set_default_dtype(torch.float64)
 
     from load_data import ProfileDataset
-    dataset = ProfileDataset("data", [48], axis_symmetric=False, spatial_subsample=5, temporal_subsample=24)
+
+    dataset = ProfileDataset(
+        "data", [40], axis_symmetric=False, spatial_subsample=6, temporal_subsample=24
+    )
     viz_file = dataset.valid_files[0]
     h_0 = dataset.data[viz_file]["profile"][10]
     print(h_0)
@@ -152,12 +147,20 @@ def main():
     h_0 -= torch.min(h_0)
     print(h_0)
     h_0 /= torch.max(h_0)
-    print(h_0)
-    h_0 -= 0.5
-    print(h_0)
-    h_0 = torch.max(torch.zeros_like(h_0), h_0)/1000
-    print(h_0)
-    r_c = 0.000003 * 256
+    h_0 -= 0.6
+    h_0 = torch.max(torch.zeros_like(h_0), h_0)
+
+    import matplotlib.pyplot as plt
+
+    plt.plot(h_0)
+    print(h_0.dtype)
+    h_0 = h_0.to(torch.float64)
+    h_0 = utils.drop_polynomial_fit(h_0, 8)
+    plt.plot(h_0)
+    plt.show()
+
+    h_0 *= 0.000003 * 100
+    r_c = 0.000003 * 640
     maxh0 = torch.max(h_0).item() * 1.2
     print(h_0.shape, maxh0)
     print(0.000003*220)
@@ -195,8 +198,8 @@ def main():
     #     sigma=0.072,  # Surface tension (N/m) eg 0.072
     #     eta=1e-5,  # Viscosity (Pa*s) eg 1e-3
     # )
-    Nt = 1000
-    dt = 1e-4
+    Nt = 500
+    dt = 1e-3
     t_lin = torch.linspace(0, dt * Nt, Nt)
 
     def evap_model(params, r, h, kappa=0e-3):
@@ -241,15 +244,18 @@ def main():
 
     drop_model = PureDropModel(params, evap_model=deegan_evap_model, sigma=10)
 
-    h_0 = utils.setup_parabolic_initial_h_profile(
-        drop_model.r, 0.8 * params.hmax0, params.r_c, order=4
-    )
-
-
+    # h_0 = utils.setup_parabolic_initial_h_profile(
+    #     drop_model.r, 0.8 * params.hmax0, params.r_c, order=4
+    # )
 
     drop_viz.flow_viz(drop_model, h_0)
 
-    h_history = utils.run_forward_euler_simulation(drop_model, h_0, t_lin)
+    def post_fn(h):
+        h = torch.clamp(h, min=0)
+        h = utils.drop_polynomial_fit(h, 8)
+        return h
+
+    h_history = utils.run_forward_euler_simulation(drop_model, h_0, t_lin, post_fn)
     drop_viz.plot_height_profile_evolution(drop_model.r, h_history, params)
 
     # plot the velocity profile and

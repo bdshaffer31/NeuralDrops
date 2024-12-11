@@ -3,6 +3,7 @@ import torch
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 
+
 def set_styling():
     plt.rcParams.update(
         {
@@ -167,6 +168,7 @@ def plot_velocity(drop_model, h):
     plt.legend()
     plt.show()
 
+
 def flow_viz(drop_model, h):
     u_grid = drop_model.calc_u_velocity(h)
     w_grid = drop_model.calc_w_velocity(h, u_grid)
@@ -206,19 +208,27 @@ def flow_viz(drop_model, h):
 
     # Plot flow direction using quiver
     plt.quiver(
-        R_down, Z_down, U_down_unit, W_down_unit,
-        color="white", scale=50, width=0.003, headwidth=3 # scale=100_000
+        R_down,
+        Z_down,
+        U_down_unit,
+        W_down_unit,
+        color="white",
+        scale=50,
+        width=0.003,
+        headwidth=3,  # scale=100_000
     )
 
     formatter = ticker.ScalarFormatter(useMathText=True)
     formatter.set_scientific(True)
-    formatter.set_powerlimits((-3, 3))  # Use scientific notation for values between 10^-3 and 10^3
+    formatter.set_powerlimits(
+        (-3, 3)
+    )  # Use scientific notation for values between 10^-3 and 10^3
 
     plt.gca().xaxis.set_major_formatter(formatter)
     plt.gca().yaxis.set_major_formatter(formatter)
 
     # Add a single scale label for each axis
-    plt.gca().ticklabel_format(style='sci', axis='both', scilimits=(-3, 3))
+    plt.gca().ticklabel_format(style="sci", axis="both", scilimits=(-3, 3))
 
     plt.xlabel("Radius (m)")
     plt.ylabel("Height (m)")
