@@ -1,6 +1,8 @@
 import torch
 from drop_model import evap_models
 
+import matplotlib.pyplot as plt
+
 
 class PureDropModel:
     def __init__(self, params, evap_model=None, smoothing_fn=None):
@@ -61,6 +63,10 @@ class PureDropModel:
         )
 
         u_grid = self.interp_h_mask_grid(u_grid, h, self.z)
+
+        u_grid[u_grid > 10] = 10
+        u_grid[u_grid < -10] = -10
+
         return u_grid
 
     # w velocity calculation
@@ -74,6 +80,9 @@ class PureDropModel:
             (integrand[:, :-1] + integrand[:, 1:]) * 0.5 * self.params.dz, dim=1
         )
         w_grid = self.interp_h_mask_grid(w_grid, h, self.z)
+
+        w_grid[w_grid > 10] = 10
+        w_grid[w_grid < -10] = -10
         return w_grid
 
     def interp_h_mask_grid(self, grid_data, h, z):
@@ -137,10 +146,10 @@ def main():
     from load_data import ProfileDataset
 
     dataset = ProfileDataset(
-        "data", [46], axis_symmetric=False, spatial_subsample=2, temporal_subsample=24
+        "data", [13], axis_symmetric=False, spatial_subsample=5, temporal_subsample=24
     )
     viz_file = dataset.valid_files[0]
-    h_0 = dataset.data[viz_file]["profile"][0]
+    h_0 = dataset.data[viz_file]["profile"][10]
     h_0 = dataset.profile_scaler.inverse_apply(h_0)
     print(torch.max(h_0), torch.min(h_0))
     h_0 -= torch.min(h_0)
@@ -166,10 +175,10 @@ def main():
     # TODO consider doing something different with these
     params = utils.SimulationParams(
         r_c=r_c,  # Radius of the droplet in meters
-        hmax0=maxh0,  # Initial droplet height at the center in meters
-        Nr=640,  # Number of radial points
+        hmax0=0.8e-3,  # Initial droplet height at the center in meters
+        Nr=256,  # Number of radial points
         Nz=110,  # Number of z-axis points
-        dr= 2 * r_c / (640 - 1),  # Radial grid spacing
+        dr= 2 * r_c / (256 - 1),  # Radial grid spacing
         dz=maxh0 / (110 - 1),  # Vertical grid spacing
         rho=1,  # Density of the liquid (kg/m^3) eg 1
         sigma=0.072,  # Surface tension (N/m) eg 0.072
@@ -196,17 +205,18 @@ def main():
     #     sigma=0.072,  # Surface tension (N/m) eg 0.072
     #     eta=1e-5,  # Viscosity (Pa*s) eg 1e-3
     # )
-    Nt = 6000
+    Nt = 5000
     dt = 1e-3
     t_lin = torch.linspace(0, dt * Nt, Nt)
     
-    def smoothing_fn(x):
-        return utils.gaussian_blur_1d(x, sigma=10)
-
-    drop_model = PureDropModel(params, evap_model=evap_models.deegan_evap_model, smoothing_fn=smoothing_fn)
+    drop_model = PureDropModel(params, evap_model=evap_models.deegan_evap_model, smoothing_fn=utils.smoothing_fn)
 
     h_0 = utils.setup_parabolic_initial_h_profile(
         drop_model.r, 0.8 * params.hmax0, params.r_c, order=4
+    )
+
+    h_0 = utils.setup_cap_initial_h_profile(
+        drop_model.r, 0.8 * params.hmax0, params.r_c
     )
 
     drop_viz.flow_viz(drop_model, h_0)
@@ -224,6 +234,7 @@ def main():
     drop_viz.plot_velocity(drop_model, h_history[-1].clone())
     drop_viz.inspect(drop_model, h_history[0].clone())
     drop_viz.plot_velocity(drop_model, h_history[0].clone())
+    drop_viz.flow_viz(drop_model, h_history[-1].clone())
 
 
 if __name__ == "__main__":

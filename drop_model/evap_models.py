@@ -22,8 +22,8 @@ def deegan_evap_model(params, r, h):
         lam = -(torch.pi-2.0*theta)/(2.0*torch.pi-2.0*theta)
         J_c = 0.6*torch.pow(1-torch.square(r_in/R_c),lam)
 
-        J_c[-1]=J_c[-2]
-        J_c[0]=J_c[1]
+        J_c[-1]=J_c[-2] *1.5
+        J_c[0]=J_c[1] *1.5
 
         J_term = (b_c - params.RH)*J_c + J_delta
 
@@ -31,16 +31,28 @@ def deegan_evap_model(params, r, h):
         return m_dot
 
     h_max_current = torch.max(h)
-    num_c = list(map(lambda i: i > 0.01 * params.hmax0, h)).index(True)
-    r_c_current = - r[num_c]
+    #num_c = list(map(lambda i: i > 0.01 * params.hmax0, h)).index(True)
+    
+    mask = torch.abs(h) > 1e-6
+    non_zero_indices = torch.where(mask)[0]
+    if len(non_zero_indices) <= 1:
+        return h  # If there are no non-zero elements, return the original tensor
+    start_idx = non_zero_indices[0]  # + 1
+    end_idx = non_zero_indices[-1] + 1
+    r_c_current = (r[end_idx] - r[start_idx]) / 2
     theta_current = 2*torch.arctan(h_max_current/r_c_current)
 
     m_dot = torch.zeros_like(r)
-    m_dot[num_c:-num_c] = mass_loss(params, r[num_c:-num_c], theta_current, r_c_current)
+
+    r_flux = torch.linspace(
+            -r_c_current, r_c_current, (end_idx - start_idx)
+        )  # r grid (avoiding r=0)
+    
+    m_dot[start_idx:end_idx] = mass_loss(params, r_flux, theta_current, r_c_current)
 
     dh_dr = grad(h,params.dr)
     w_e = -m_dot/params.rho* torch.sqrt(1 + torch.square(dh_dr))
-    return w_e - 0.5e-6
+    return w_e - 0.2e-6
 
 def diddens_evap_model(params, r, h):
 

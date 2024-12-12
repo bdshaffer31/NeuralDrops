@@ -108,6 +108,9 @@ def gaussian_blur_1d(input_tensor, sigma):
 
     return blurred.squeeze(0).squeeze(0)
 
+def smoothing_fn(x):
+        return gaussian_blur_1d(x, sigma=10)
+
 
 def fourier_projection(h, num_frequencies=10):
     fft_coeffs = torch.fft.fft(h)
