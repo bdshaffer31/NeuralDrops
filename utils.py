@@ -4,7 +4,7 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 import scipy.io
-import load_data
+import load_data_old
 from scipy.ndimage import median_filter, gaussian_filter
 
 
@@ -219,7 +219,7 @@ def setup_dataloaders(x, y, test_size=0.2, batch_size=32, feature_norm=True):
         x, y, test_size=test_size, random_state=42
     )
 
-    normalizer = load_data.Standardizer(X_train, feature_norm)
+    normalizer = load_data_old.Standardizer(X_train, feature_norm)
 
     X_train = normalizer(X_train)
     X_val = normalizer(X_val)
@@ -242,10 +242,10 @@ if __name__ == "__main__":
     # for key in tensor_dict:
     #     print(f"{key}, shape: {tensor_dict[key].shape}")
 
-    load_data = load_single_mat_file("data/Exp_1.mat")
-    for key, val in load_data.items():
+    load_data_old = load_single_mat_file("data/Exp_1.mat")
+    for key, val in load_data_old.items():
         print(key, val)
-    print(load_data["profile"].shape)
+    print(load_data_old["profile"].shape)
     input()
 
     boundary_tensor = load_test_mat_file()

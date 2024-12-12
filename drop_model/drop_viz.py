@@ -110,12 +110,16 @@ def inspect(drop_model, h):
     plt.show()
 
 
-def plot_velocity(drop_model, h):
+def plot_velocity(drop_model, h, center_mask=6, corner_mask=3):
     u_grid = drop_model.calc_u_velocity(h)
     w_grid = drop_model.calc_w_velocity(h, u_grid)
 
     u_grid[u_grid == 0.0] = torch.nan
     w_grid[w_grid == 0.0] = torch.nan
+    u_grid = set_nans_in_center(u_grid, center_mask)
+    u_grid = set_nans_in_corners(u_grid, corner_mask)
+    w_grid = set_nans_in_center(w_grid, center_mask)
+    w_grid = set_nans_in_corners(w_grid, corner_mask)
 
     plt.figure(figsize=(6, 3))
     plt.imshow(
@@ -133,9 +137,14 @@ def plot_velocity(drop_model, h):
     plt.plot(
         drop_model.r, h, color="k", linewidth=2, label="$h(r)$"
     )  # Overlay height profile
+    setup_tick_formatter(plt.gca())
+    plt.gca().autoscale_view()
+    plt.gca().xaxis.set_major_locator(plt.MaxNLocator(5))
+    plt.gca().yaxis.set_major_locator(plt.MaxNLocator(5))
+
     plt.xlabel("Radius (m)")
     plt.ylabel("Height (m)")
-    plt.colorbar(label="Radial velocity $u(r, z)$")
+    plt.colorbar(label=r"$u(r, z)$")
     plt.title("Radial Velocity")
     plt.grid(False)
     plt.tight_layout()
@@ -159,9 +168,14 @@ def plot_velocity(drop_model, h):
     plt.plot(
         drop_model.r, h, color="k", linewidth=2, label="$h(r)$"
     )  # Overlay height profile
+    setup_tick_formatter(plt.gca())
+    plt.gca().autoscale_view()
+    plt.gca().xaxis.set_major_locator(plt.MaxNLocator(5))
+    plt.gca().yaxis.set_major_locator(plt.MaxNLocator(5))
+
     plt.xlabel("Radius (m)")
     plt.ylabel("Height (m)")
-    plt.colorbar(label="Vertical velocity $w(r, z)$")
+    plt.colorbar(label=r"$w(r, z)$")
     plt.title("Vertical Velocity")
     plt.grid(False)
     plt.tight_layout()
@@ -169,10 +183,14 @@ def plot_velocity(drop_model, h):
     plt.show()
 
 
-def flow_viz(drop_model, h):
+def flow_viz(drop_model, h, center_mask=8, corner_mask=4, log_mag=False):
     u_grid = drop_model.calc_u_velocity(h)
     w_grid = drop_model.calc_w_velocity(h, u_grid)
     flow_magnitude = torch.sqrt(u_grid**2 + w_grid**2)
+    if log_mag:
+        flow_magnitude = torch.log(flow_magnitude)
+    flow_magnitude = set_nans_in_center(flow_magnitude, center_mask)
+    flow_magnitude = set_nans_in_corners(flow_magnitude, corner_mask)
     flow_magnitude[flow_magnitude == 0.0] = torch.nan
 
     plt.figure(figsize=(6, 3))
@@ -218,23 +236,60 @@ def flow_viz(drop_model, h):
         headwidth=3,  # scale=100_000
     )
 
-    formatter = ticker.ScalarFormatter(useMathText=True)
-    formatter.set_scientific(True)
-    formatter.set_powerlimits(
-        (-3, 3)
-    )  # Use scientific notation for values between 10^-3 and 10^3
-
-    plt.gca().xaxis.set_major_formatter(formatter)
-    plt.gca().yaxis.set_major_formatter(formatter)
-
-    # Add a single scale label for each axis
-    plt.gca().ticklabel_format(style="sci", axis="both", scilimits=(-3, 3))
+    setup_tick_formatter(plt.gca())
+    plt.gca().autoscale_view()
+    plt.gca().xaxis.set_major_locator(plt.MaxNLocator(5))
+    plt.gca().yaxis.set_major_locator(plt.MaxNLocator(5))
 
     plt.xlabel("Radius (m)")
     plt.ylabel("Height (m)")
-    plt.colorbar(label="velocity magnitude $||v(r, z)||$")
-    plt.title("Flow Field")
+    if log_mag:
+        cmap_label = r"log $||v(r, z)||$"
+    else:
+        cmap_label = r"$||v(r, z)||$"
+    plt.colorbar(label=cmap_label)
+    plt.title(r"$v(r, z)$")
     plt.grid(False)
     plt.tight_layout()
     plt.legend()
     plt.show()
+
+def setup_tick_formatter(ax):
+    formatter = ticker.ScalarFormatter(useMathText=True)
+    formatter.set_scientific(True)
+    formatter.set_powerlimits((-0, 0))  # Force scientific notation for values between 10^-1 and 10^1
+
+    ax.xaxis.set_major_formatter(formatter)
+    ax.yaxis.set_major_formatter(formatter)
+
+    # Ensure the ticks are redrawn
+    ax.ticklabel_format(style="sci", axis="both", scilimits=(-0, 0))
+
+def set_nans_in_center(x, center_mask_size):
+    if center_mask_size == 0:
+        return x
+    middle_i = x.shape[0] // 2
+    start_i = max(middle_i - center_mask_size // 2, 0)
+    end_i = min(middle_i + center_mask_size // 2 + 1, x.shape[0])
+    x[start_i:end_i] = torch.nan
+    return x
+
+
+def set_nans_in_corners(x, corner_mask_size=5):
+    """
+    Set values to NaN inward from the start and end non-zero indices along the first axis.
+    """
+    if corner_mask_size == 0:
+        return x
+    # non_zero_indices = torch.nonzero(x.any(dim=1), as_tuple=True)[0]
+    mask = torch.abs(x) > 1e-8
+    non_zero_indices = torch.where(mask)[0]
+    if len(non_zero_indices) == 0:
+        return x
+    start_idx = non_zero_indices[0]
+    end_idx = non_zero_indices[-1]
+    mask_start = min(start_idx + corner_mask_size, x.shape[0])
+    mask_end = max(end_idx - corner_mask_size, 0)
+    x[start_idx:mask_start, :] = float('nan')
+    x[mask_end:end_idx + 1, :] = float('nan')
+    return x

@@ -28,7 +28,7 @@ class SimulationParams:
     RH: float #Relative Humidity
 
 
-def setup_parabolic_initial_h_profile(r, h0, r_c, drop_fraction=1.0, order=2):
+def setup_polynomial_initial_h_profile(r, h0, r_c, drop_fraction=1.0, order=2):
     # setup up a polynomial initial drop profile
     drop_fraction = 1.0  # percent of r taken up with drop (vs 0)
     h = torch.zeros_like(r)

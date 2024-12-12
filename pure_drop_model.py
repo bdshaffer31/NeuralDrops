@@ -15,8 +15,8 @@ class PureDropModel:
     def setup_grids(self):
         r = torch.linspace(
             -self.params.r_c, self.params.r_c, self.params.Nr
-        )  # r grid (avoiding r=0)
-        z = torch.linspace(0, self.params.hmax0, self.params.Nz)  # z grid
+        )
+        z = torch.linspace(0, self.params.hmax0, self.params.Nz)
         return r, z
 
     @staticmethod
@@ -143,7 +143,7 @@ def main():
     drop_viz.set_styling()
     torch.set_default_dtype(torch.float64)
 
-    from load_data import ProfileDataset
+    from load_data_old import ProfileDataset
 
     dataset = ProfileDataset(
         "data", [13], axis_symmetric=False, spatial_subsample=5, temporal_subsample=24
@@ -155,17 +155,11 @@ def main():
     h_0 -= torch.min(h_0)
     h_0 /= torch.max(h_0)
     h_0 -= 0.6
-    h_0 = torch.max(torch.zeros_like(h_0), h_0)
-
-    import matplotlib.pyplot as plt
-
-    plt.plot(h_0)
-    print(h_0.dtype)
+    h_0 = torch.clamp(h_0, min=0.0)
     h_0 = h_0.to(torch.float64)
     h_0 = utils.drop_polynomial_fit(h_0, 8)
-    #plt.plot(h_0)
-    #plt.show()
-    h_0 *= 0.001
+
+    h_0 *= 0.000003 * 100
     r_c = 0.000003 * 640
     maxh0 = torch.max(h_0).item() * 1.2
     print(h_0.shape, maxh0)
@@ -195,18 +189,29 @@ def main():
         RH = 0.50, # Relative Humidity (-)
     )
     # params = utils.SimulationParams(
-    #     r_c=1e-3,  # Radius of the droplet in meters
-    #     hmax0=5e-4,  # Initial droplet height at the center in meters
+    #     r_c=r_c,  # Radius of the droplet in meters
+    #     hmax0=maxh0,  # Initial droplet height at the center in meters
     #     Nr=214,  # Number of radial points
     #     Nz=110,  # Number of z-axis points
-    #     dr=2 * 1e-2 / (214 - 1),  # Radial grid spacing
-    #     dz=5e-4 / (110 - 1),  # Vertical grid spacing
+    #     dr=2 * r_c / (214 - 1),  # Radial grid spacing
+    #     dz=maxh0 / (110 - 1),  # Vertical grid spacing
     #     rho=1,  # Density of the liquid (kg/m^3) eg 1
     #     sigma=0.072,  # Surface tension (N/m) eg 0.072
-    #     eta=1e-5,  # Viscosity (Pa*s) eg 1e-3
+    #     eta=1e-3,  # Viscosity (Pa*s) eg 1e-3
     # )
-    Nt = 5000
-    dt = 1e-3
+    params = utils.SimulationParams(
+        r_c=1e-3,  # Radius of the droplet in meters
+        hmax0=5e-4,  # Initial droplet height at the center in meters
+        Nr=214,  # Number of radial points
+        Nz=110,  # Number of z-axis points
+        dr=2 * 1e-3 / (214 - 1),  # Radial grid spacing
+        dz=5e-4 / (110 - 1),  # Vertical grid spacing
+        rho=1,  # Density of the liquid (kg/m^3) eg 1
+        sigma=0.072,  # Surface tension (N/m) eg 0.072
+        eta=1e-5,  # Viscosity (Pa*s) eg 1e-3
+    )
+    Nt = 1000
+    dt = 1e-4
     t_lin = torch.linspace(0, dt * Nt, Nt)
     
     drop_model = PureDropModel(params, evap_model=evap_models.deegan_evap_model, smoothing_fn=utils.smoothing_fn)
@@ -219,21 +224,21 @@ def main():
         drop_model.r, 0.8 * params.hmax0, params.r_c
     )
 
-    drop_viz.flow_viz(drop_model, h_0)
+    drop_viz.flow_viz(drop_model, h_0, 0, 0)
 
     def post_fn(h):
-        h = torch.clamp(h, min=0)
-        h = utils.drop_polynomial_fit(h, 8)
+        h = torch.clamp(h, min=0) # ensure non-negative height
+        h = utils.drop_polynomial_fit(h, 8) # project height on polynomial basis
         return h
 
     h_history = utils.run_forward_euler_simulation(drop_model, h_0, t_lin, post_fn)
     drop_viz.plot_height_profile_evolution(drop_model.r, h_history, params)
 
     # plot the velocity profile and
-    drop_viz.inspect(drop_model, h_history[-1].clone())
-    drop_viz.plot_velocity(drop_model, h_history[-1].clone())
+    # drop_viz.inspect(drop_model, h_history[-1].clone())
+    # drop_viz.plot_velocity(drop_model, h_history[-1].clone())
     drop_viz.inspect(drop_model, h_history[0].clone())
-    drop_viz.plot_velocity(drop_model, h_history[0].clone())
+    drop_viz.plot_velocity(drop_model, h_history[0].clone(), 0, 0)
     drop_viz.flow_viz(drop_model, h_history[-1].clone())
 
 
