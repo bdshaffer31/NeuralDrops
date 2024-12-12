@@ -50,6 +50,7 @@ def get_model_config(model_type):
     }
     return model_configs[model_type]()
 
+
 def main(train=False):
     # if a config file isn't provided load from options
     run_dir = "test_fno_axis_symmetric"
@@ -62,9 +63,9 @@ def main(train=False):
         "data_file": "data/simulation_results.pth",  # specify data type
         "batch_size": 32,
         "val_ratio": 0.1,
-        "run_keys": [1], # if None use all
+        "run_keys": [1],  # if None use all
         "conditioning_keys": ["alpha", "beta", "gamma"],
-        "profile_scale": 100 # approx 1 / spacial unit order of magnitude
+        "profile_scale": 100,  # approx 1 / spacial unit order of magnitude
     }
 
     config["model_config"] = get_model_config(config["model_type"])

@@ -10,7 +10,6 @@ from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 
 
-
 class LabelCoder:
     def __init__(self, values):
         self.encoder, self.decoder = self.create_label_encoder(values)
@@ -57,7 +56,10 @@ def load_data(file_path):
         contents_dict["profile"] = real_contents[7][0].T
     return contents_dict
 
-def preprocess_profile(profile, temporal_pad, temporal_subsample, spatial_subsample, axis_symmetric):
+
+def preprocess_profile(
+    profile, temporal_pad, temporal_subsample, spatial_subsample, axis_symmetric
+):
     """Preprocess the profile data."""
     profile = np.array(profile, dtype="float32")
     profile = torch.tensor(profile, dtype=torch.float32)
@@ -68,16 +70,30 @@ def preprocess_profile(profile, temporal_pad, temporal_subsample, spatial_subsam
     profile = utils.center_data(profile)
     if axis_symmetric:
         profile = utils.central_split_data(profile)
-    profile = profile[::temporal_subsample, spatial_subsample//2::spatial_subsample]
+    profile = profile[::temporal_subsample, spatial_subsample // 2 :: spatial_subsample]
     return profile
 
-def preprocess_and_save(data_dir, run_nums, output_file, valid_temps=None, valid_solutes=None, valid_substrates=None, temporal_pad=64, temporal_subsample=1, spatial_subsample=1, axis_symmetric=False, use_log_transform=True, dtype=torch.float32):
+
+def preprocess_and_save(
+    data_dir,
+    run_nums,
+    output_file,
+    valid_temps=None,
+    valid_solutes=None,
+    valid_substrates=None,
+    temporal_pad=64,
+    temporal_subsample=1,
+    spatial_subsample=1,
+    axis_symmetric=False,
+    use_log_transform=True,
+    dtype=torch.float32,
+):
     """Preprocess all valid files in the data directory and save them in a single .pth file."""
     m_per_px = 0.00003
 
     # Find all valid files
     files = [f"Exp_{f}.mat" for f in run_nums]
-    
+
     # Data lists for fitting scalers and encoders
     h_max, solutes, substrates = [], [], []
 
@@ -87,7 +103,7 @@ def preprocess_and_save(data_dir, run_nums, output_file, valid_temps=None, valid
         solutes.append(data["solute"])
         substrates.append(data["substrate"])
         h_max.append(np.max(data["profile"]))
-    
+
     # Fit encoders
     solute_encoder = LabelCoder(solutes)
     substrate_encoder = LabelCoder(substrates)
@@ -108,9 +124,15 @@ def preprocess_and_save(data_dir, run_nums, output_file, valid_temps=None, valid
         r_lin = torch.arange(raw_profile.shape[1]) * m_per_px
         z_lin = torch.arange(h_max) * m_per_px
         raw_profile = raw_profile * m_per_px
-        profile = preprocess_profile(raw_profile, temporal_pad, temporal_subsample, spatial_subsample, axis_symmetric)
+        profile = preprocess_profile(
+            raw_profile,
+            temporal_pad,
+            temporal_subsample,
+            spatial_subsample,
+            axis_symmetric,
+        )
         t_lin = t_lin[::temporal_subsample]
-        r_lin = r_lin[spatial_subsample//2::spatial_subsample]
+        r_lin = r_lin[spatial_subsample // 2 :: spatial_subsample]
         z_lin = z_lin[::spatial_subsample]
 
         preprocessed_data[run_num] = {
@@ -170,7 +192,15 @@ class PreprocessedDataset(Dataset):
 
 # TODO create a base class and inherit for these to simplify
 class NODEDataset(Dataset):
-    def __init__(self, data, traj_len=10, conditioning_keys=None, profile_key="profile", run_keys=None, profile_scale=1.0):
+    def __init__(
+        self,
+        data,
+        traj_len=10,
+        conditioning_keys=None,
+        profile_key="profile",
+        run_keys=None,
+        profile_scale=1.0,
+    ):
         """
         Args:
             data (dict): Dictionary of preprocessed data.
@@ -185,7 +215,7 @@ class NODEDataset(Dataset):
         self.profile_key = profile_key
         self.profile_scale = profile_scale
         self.samples = self._prepare_samples()
-    
+
     def get_conditioning(self, exp_data):
         z = torch.tensor(
             [exp_data[key] for key in self.conditioning_keys], dtype=torch.float32
@@ -201,7 +231,9 @@ class NODEDataset(Dataset):
 
             for t in range(num_time_steps - self.traj_len):
                 h0 = profile[t]  # Shape: [x]
-                target_h = profile[t + 1 : t + 1 + self.traj_len]  # Shape: [traj_len, x]
+                target_h = profile[
+                    t + 1 : t + 1 + self.traj_len
+                ]  # Shape: [traj_len, x]
                 z = self.get_conditioning(exp_data)
                 t = torch.linspace(0, self.traj_len, self.traj_len)  # Adjust as needed
 
@@ -217,7 +249,14 @@ class NODEDataset(Dataset):
 
 
 class FNODataset(Dataset):
-    def __init__(self, data, conditioning_keys=None, profile_key="profile", run_keys=None, profile_scale=1.0):
+    def __init__(
+        self,
+        data,
+        conditioning_keys=None,
+        profile_key="profile",
+        run_keys=None,
+        profile_scale=1.0,
+    ):
         """
         Args:
             data (dict): Dictionary of preprocessed data.
@@ -230,7 +269,7 @@ class FNODataset(Dataset):
         self.profile_key = profile_key
         self.profile_scale = profile_scale
         self.samples = self._prepare_samples()
-    
+
     def get_conditioning(self, exp_data):
         z = torch.tensor(
             [exp_data[key] for key in self.conditioning_keys], dtype=torch.float32
@@ -262,8 +301,9 @@ class FNODataset(Dataset):
         return self.samples[idx]
 
 
-
-def get_dataloader(filename, conditioning_keys, batch_size=32, shuffle=True, dtype=torch.float32):
+def get_dataloader(
+    filename, conditioning_keys, batch_size=32, shuffle=True, dtype=torch.float32
+):
     """
     Create a DataLoader for the preprocessed data.
     """
@@ -273,24 +313,39 @@ def get_dataloader(filename, conditioning_keys, batch_size=32, shuffle=True, dty
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
     return dataloader
 
+
 def get_train_val_dataloaders(dataset, val_ratio=0.1, batch_size=16, shuffle=True):
-    train_size = int((1-val_ratio) * len(dataset))
+    train_size = int((1 - val_ratio) * len(dataset))
     val_size = len(dataset) - train_size
     train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
     return train_loader, val_loader
 
+
 def setup_data_from_config(config):
     data_file = config["data_file"]
     loaded_data = torch.load(data_file)
 
     if config["model_type"] in ["node", "flux_fno"]:
-        dataset = NODEDataset(loaded_data, config["conditioning_keys"], traj_len=config["traj_len"], run_keys=config["run_keys"], profile_scale=config["profile_scale"])
+        dataset = NODEDataset(
+            loaded_data,
+            config["conditioning_keys"],
+            traj_len=config["traj_len"],
+            run_keys=config["run_keys"],
+            profile_scale=config["profile_scale"],
+        )
     elif config["model_type"] == "fno":
-        dataset = FNODataset(loaded_data, config["conditioning_keys"], run_keys=config["run_keys"], profile_scale=config["profile_scale"])
+        dataset = FNODataset(
+            loaded_data,
+            config["conditioning_keys"],
+            run_keys=config["run_keys"],
+            profile_scale=config["profile_scale"],
+        )
 
-    train_loader, val_loader = get_train_val_dataloaders(dataset, config["val_ratio"], config["batch_size"], shuffle=True)
+    train_loader, val_loader = get_train_val_dataloaders(
+        dataset, config["val_ratio"], config["batch_size"], shuffle=True
+    )
 
     return train_loader, val_loader, dataset
 
@@ -321,11 +376,12 @@ if __name__ == "__main__":
     # conditioning_keys = ["temp", "wt_per", "solute"]
 
     # Create the DataLoader
-    dataloader = get_dataloader(filename, conditioning_keys, batch_size=16, shuffle=True)
+    dataloader = get_dataloader(
+        filename, conditioning_keys, batch_size=16, shuffle=True
+    )
 
     # Iterate through the DataLoader
     for profile, conditioning in dataloader:
         print("Profile shape:", profile.shape)
         print("Conditioning shape:", conditioning.shape)
         break
-

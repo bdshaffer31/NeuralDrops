@@ -26,7 +26,6 @@ def validate(model_type, model, val_loader, loss_fn):
             loss = loss_fn(pred_h_t, h_t)
             val_loss += loss.item()
 
-
     return val_loss / len(val_loader)
 
 
@@ -62,7 +61,6 @@ def train(
                 optimizer.step()
                 epoch_loss += loss.item()
 
-
         avg_train_loss = epoch_loss / len(train_loader)
 
         val_loss = validate(model_type, model, val_loader, loss_fn)
@@ -89,6 +87,7 @@ def load_model_from_log_loader(log_loader):
 
     return model
 
+
 def init_node_model(model_config):
     activation_fn = networks.get_activation(model_config["activation_fn"])
     model = networks.FNO(
@@ -103,6 +102,7 @@ def init_node_model(model_config):
     )
     return model
 
+
 def init_fno_model(model_config):
     activation_fn = networks.get_activation(model_config["activation_fn"])
     model = networks.FNO(
@@ -116,6 +116,7 @@ def init_fno_model(model_config):
         fc_width=model_config["fc_width"],
     )
     return model
+
 
 def init_flux_fno(model_config):
     activation_fn = networks.get_activation(model_config["activation_fn"])
@@ -133,6 +134,7 @@ def init_flux_fno(model_config):
     model = networks.FNOFluxODESolver(ode_func, solver_type=model_config["solver"])
     return model
 
+
 def init_model(config):
     model_config = config["model_config"]
     init_fns = {
@@ -145,7 +147,7 @@ def init_model(config):
 
 def setup_in_out_dim(config, train_loader):
     model_type = config["model_type"]
-   
+
     t, h0, z, ht = next(iter(train_loader))
 
     conditioning_dim = z.shape[1]
@@ -155,10 +157,10 @@ def setup_in_out_dim(config, train_loader):
         config["model_config"]["output_dim"] = 1
     elif model_type == "node":
         config["model_config"]["input_dim"] = h0.shape[1]
-        config["model_config"]["output_dim"] =  ht.shape[2]
+        config["model_config"]["output_dim"] = ht.shape[2]
     elif model_type == "flux_fno":
         config["model_config"]["input_dim"] = conditioning_dim + 1
-        config["model_config"]["output_dim"] = 1    
+        config["model_config"]["output_dim"] = 1
     return config
 
 
