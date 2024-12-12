@@ -327,7 +327,7 @@ def setup_data_from_config(config):
     data_file = config["data_file"]
     loaded_data = torch.load(data_file)
 
-    if config["model_type"] in ["node", "flux_fno"]:
+    if config["model_type"] in ["node", "fno_node", "flux_fno"]:
         dataset = NODEDataset(
             loaded_data,
             config["conditioning_keys"],
@@ -351,18 +351,18 @@ def setup_data_from_config(config):
 
 
 if __name__ == "__main__":
-    # data_dir = "data/raw_drop_data"  # Replace with the actual path to your data directory
-    # output_file = "data/drop_data.pth"
+    data_dir = "data/raw_drop_data"  # Replace with the actual path to your data directory
+    output_file = "data/drop_data.pth"
 
-    # preprocess_and_save(
-    #     data_dir=data_dir,
-    #     run_nums=utils.good_run_numbers(),
-    #     output_file=output_file,
-    #     temporal_pad=128,
-    #     temporal_subsample=6,
-    #     spatial_subsample=12,
-    #     axis_symmetric=False,
-    # )
+    preprocess_and_save(
+        data_dir=data_dir,
+        run_nums=utils.good_run_numbers(),
+        output_file=output_file,
+        temporal_pad=128,
+        temporal_subsample=12,
+        spatial_subsample=6,
+        axis_symmetric=False,
+    )
 
     # data = torch.load("data/drop_data.pth")
     # # print(data)

@@ -80,7 +80,7 @@ def main():
 
         # Saved dataset MUST have:
         # "profile": profile,
-        # "t_lin": t_lin,
+        # "t": t_lin,
         # "r_lin": r_lin,
         # "z_lin": z_lin,
         # and can additionally have any number of extra contents or conditioning data

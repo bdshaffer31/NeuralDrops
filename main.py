@@ -16,6 +16,19 @@ def flux_fno_model_config():
     }
     return model_config
 
+def fno_node_model_config():
+    model_config = {
+        # "model_type": "fno_node",
+        "modes": 16,
+        "num_fno_layers": 4,
+        "fno_width": 64,
+        "num_fc_layers": 4,
+        "fc_width": 256,
+        "activation_fn": "relu",
+        "solver": "euler",
+    }
+    return model_config
+
 
 def fno_model_config():
     model_config = {
@@ -46,6 +59,7 @@ def get_model_config(model_type):
     model_configs = {
         "fno": fno_model_config,
         "node": node_model_config,
+        "fno_node": fno_node_model_config,
         "flux_fno": flux_fno_model_config,
     }
     return model_configs[model_type]()

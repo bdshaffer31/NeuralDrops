@@ -15,7 +15,7 @@ import load_data
 def validate(model_type, model, val_loader, loss_fn):
     model.eval()
     val_loss = 0.0
-    if model_type in ["node", "flux_fno"]:
+    if model_type in ["node", "flux_fno", "fno_node"]:
         for t, x_0, z, y in val_loader:
             y_pred = model(x_0, z, t[0]).transpose(0, 1)
             loss = loss_fn(y_pred, y)
@@ -44,7 +44,7 @@ def train(
         model.train()
         epoch_loss = 0.0
 
-        if model_type in ["node", "flux_fno"]:
+        if model_type in ["node", "fno_node", "flux_fno"]:
             for t, x_0, z, y_traj in train_loader:
                 optimizer.zero_grad()
                 pred_y_traj = model(x_0, z, t[0]).transpose(0, 1)
@@ -118,7 +118,7 @@ def init_fno_model(model_config):
     return model
 
 
-def init_flux_fno(model_config):
+def init_fno_node(model_config):
     activation_fn = networks.get_activation(model_config["activation_fn"])
     fno_model = networks.FNO_Flux(
         model_config["input_dim"],
@@ -135,11 +135,37 @@ def init_flux_fno(model_config):
     return model
 
 
+def init_flux_fno(model_config):
+    # TODO: initialize a physics model, with the flux fno as the evap model
+    activation_fn = networks.get_activation(model_config["activation_fn"])
+    fno_model = networks.FNO_Flux(
+        model_config["input_dim"],
+        model_config["output_dim"],
+        num_fno_layers=model_config["num_fno_layers"],
+        modes=model_config["modes"],
+        width=model_config["fno_width"],
+        activation_fn=activation_fn,
+        num_fc_layers=model_config["num_fc_layers"],
+        fc_width=model_config["fc_width"],
+    )
+
+    # ========= PSUEDO code ==================
+    # get needed params, might have to load data from config here unfortunately
+    drop_model = drop_model(...) #, evap_model=fno_model)
+    # TODO actually we need to wrap the drop model to handle batching (with vmap)?
+    drop_model = networks.NeuralDropModel(..., evap_model=fno_model)
+
+    ode_func = networks.FNOFluxODEWrapper(drop_model)
+    model = networks.FNOFluxODESolver(ode_func, solver_type=model_config["solver"])
+    return model
+
+
 def init_model(config):
     model_config = config["model_config"]
     init_fns = {
         "fno": init_fno_model,
         "node": init_node_model,
+        "fno_node": init_fno_node,
         "flux_fno": init_flux_fno,
     }
     return init_fns[config["model_type"]](model_config)
@@ -158,7 +184,7 @@ def setup_in_out_dim(config, train_loader):
     elif model_type == "node":
         config["model_config"]["input_dim"] = h0.shape[1]
         config["model_config"]["output_dim"] = ht.shape[2]
-    elif model_type == "flux_fno":
+    elif model_type in ["fno_node", "flux_fno"]:
         config["model_config"]["input_dim"] = conditioning_dim + 1
         config["model_config"]["output_dim"] = 1
     return config
