@@ -157,10 +157,15 @@ def drop_polynomial_fit(h_0, degree=3):
     coeffs, *_ = torch.linalg.lstsq(A, h_0_nonzero.unsqueeze(1))
     h_0_fitted = (A @ coeffs).squeeze(1)
 
+    
+
     h_0_fitted_full = h_0.clone()
     h_0_fitted_full[start_idx:end_idx] = h_0_fitted
 
-    return h_0_fitted_full
+    shift = int(h_0.shape[0] // 2 - (end_idx + start_idx) / 2)
+    h_shifted = torch.roll(h_0_fitted_full, shifts=shift)
+
+    return h_shifted
 
 
 def drop_center_polynomial_fit(h_0, degree=3, mask_size=10, fit_size=20):

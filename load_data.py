@@ -540,8 +540,8 @@ if __name__ == "__main__":
     profile = utils.pad_profile_to_length(profile, 8000)
 
     profile = profile[::1, ::1]
-    profile = profile - torch.min(profile)
-    profile = profile / torch.max(profile)
+    #profile = profile - torch.min(profile)
+    #profile = profile / torch.max(profile)
 
     print(profile.shape)
     # plot_profile(profile)

@@ -181,7 +181,7 @@ def compute_w_velocity(params, r, z, field_vars, h):
     w_grid[0, :] = w_grid[1, :]  # hack to deal with numerical issues at r ~ 0
     return w_grid
 
-def mass_loss_tracked_r_c(params, r , h):
+def mass_loss_tracked_r_c(params, r, h):
 
     def mass_loss (params, r_in, theta, R_c):
         p_sat = 10**(params.A-params.B/(params.C+params.T-273.15)) #Antoine's Equation
@@ -490,12 +490,12 @@ def run():
     h_0 = setup_cap_initial_h_profile(
         r, params.hmax0, params.r_c
     )
-    time_funcs(params, r, z, field_vars, h_0)
+    #time_funcs(params, r, z, field_vars, h_0)
 
     h_profiles = eval(params, r, z, field_vars, h_0)
 
     # plot the velocity profile and
-    #inspect(params, r, z, field_vars, h_profiles[-1])
+    inspect(params, r, z, field_vars, h_profiles[-1])
     plot_velocity(params, r, z, field_vars, h_profiles[-1])
 
 

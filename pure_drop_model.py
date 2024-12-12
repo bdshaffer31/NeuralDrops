@@ -1,4 +1,5 @@
 import torch
+from drop_model import evap_models
 
 
 class PureDropModel:
@@ -136,16 +137,13 @@ def main():
     from load_data import ProfileDataset
 
     dataset = ProfileDataset(
-        "data", [40], axis_symmetric=False, spatial_subsample=6, temporal_subsample=24
+        "data", [46], axis_symmetric=False, spatial_subsample=2, temporal_subsample=24
     )
     viz_file = dataset.valid_files[0]
-    h_0 = dataset.data[viz_file]["profile"][10]
-    print(h_0)
+    h_0 = dataset.data[viz_file]["profile"][0]
     h_0 = dataset.profile_scaler.inverse_apply(h_0)
-    print(h_0)
     print(torch.max(h_0), torch.min(h_0))
     h_0 -= torch.min(h_0)
-    print(h_0)
     h_0 /= torch.max(h_0)
     h_0 -= 0.6
     h_0 = torch.max(torch.zeros_like(h_0), h_0)
@@ -156,10 +154,9 @@ def main():
     print(h_0.dtype)
     h_0 = h_0.to(torch.float64)
     h_0 = utils.drop_polynomial_fit(h_0, 8)
-    plt.plot(h_0)
-    plt.show()
-
-    h_0 *= 0.000003 * 100
+    #plt.plot(h_0)
+    #plt.show()
+    h_0 *= 0.001
     r_c = 0.000003 * 640
     maxh0 = torch.max(h_0).item() * 1.2
     print(h_0.shape, maxh0)
@@ -170,9 +167,9 @@ def main():
     params = utils.SimulationParams(
         r_c=r_c,  # Radius of the droplet in meters
         hmax0=maxh0,  # Initial droplet height at the center in meters
-        Nr=256,  # Number of radial points
+        Nr=640,  # Number of radial points
         Nz=110,  # Number of z-axis points
-        dr= 2 * r_c / (256 - 1),  # Radial grid spacing
+        dr= 2 * r_c / (640 - 1),  # Radial grid spacing
         dz=maxh0 / (110 - 1),  # Vertical grid spacing
         rho=1,  # Density of the liquid (kg/m^3) eg 1
         sigma=0.072,  # Surface tension (N/m) eg 0.072
@@ -183,12 +180,13 @@ def main():
         C = 233.4, # Antoine Equation (-)
         D = 2.42e-5, # Diffusivity of H2O in Air (m^2/s)
         Mw = 0.018, # Molecular weight H2O vapor (kg/mol)
-        Rs = 8.314, # Gas Constant (J/(K*mol))
+        #Rs = 8.314, # Gas Constant (J/(K*mol))
+        Rs = 461.5, # Gas Constant (J/(K*kg))
         T = 293.15, # Ambient Temperature (K)
-        RH = 0.20, # Relative Humidity (-)
+        RH = 0.50, # Relative Humidity (-)
     )
     # params = utils.SimulationParams(
-    #     r_c=1e-2,  # Radius of the droplet in meters
+    #     r_c=1e-3,  # Radius of the droplet in meters
     #     hmax0=5e-4,  # Initial droplet height at the center in meters
     #     Nr=214,  # Number of radial points
     #     Nz=110,  # Number of z-axis points
@@ -198,55 +196,18 @@ def main():
     #     sigma=0.072,  # Surface tension (N/m) eg 0.072
     #     eta=1e-5,  # Viscosity (Pa*s) eg 1e-3
     # )
-    Nt = 500
+    Nt = 6000
     dt = 1e-3
     t_lin = torch.linspace(0, dt * Nt, Nt)
-
-    def evap_model(params, r, h, kappa=0e-3):
-        return -kappa * torch.ones_like(h)
     
-    def deegan_evap_model(params, r, h):
-        
-        def grad(x, dx):
-            return torch.gradient(x, spacing=dx, edge_order=2)[0]
+    def smoothing_fn(x):
+        return utils.gaussian_blur_1d(x, sigma=10)
 
-        def mass_loss (params, r_in, theta, R_c):
-            p_sat = 10**(params.A-params.B/(params.C+params.T-273.15)) #Antoine's Equation
-            p_sat = p_sat/760.0*101325.0 # conversion (mmHg) to (Pa)
-            #print(p_sat)
+    drop_model = PureDropModel(params, evap_model=evap_models.deegan_evap_model, smoothing_fn=smoothing_fn)
 
-            #R_c = params.r_c #TODO
-            b_c = 1.0 #TODO
-            J_delta = 0 #Contribution from nonhomogenous surface concentration (multi-phase drops)
-
-            lam = -(torch.pi-2.0*theta)/(2.0*torch.pi-2.0*theta)
-            J_c = torch.pow(1-torch.square(r_in/R_c),lam)
-
-            J_c[-1]=J_c[-2]
-            J_c[0]=J_c[1]
-
-            J_term = (b_c - params.RH)*J_c + J_delta
-
-            m_dot = params.D*params.Mw*p_sat/(params.Rs*params.T*R_c)*J_term
-            return m_dot
-    
-        h_max_current = torch.max(h)
-        num_c = list(map(lambda i: i > 0.01 * params.hmax0, h)).index(True)
-        r_c_current = - r[num_c]
-        theta_current = 2*torch.arctan(h_max_current/r_c_current)
-    
-        m_dot = torch.zeros_like(r)
-        m_dot[num_c:-num_c] = mass_loss(params, r[num_c:-num_c], theta_current, r_c_current)
-
-        dh_dr = grad(h,params.dr)
-        w_e = -m_dot/params.rho* torch.sqrt(1 + torch.square(dh_dr))
-        return w_e
-
-    drop_model = PureDropModel(params, evap_model=deegan_evap_model, sigma=10)
-
-    # h_0 = utils.setup_parabolic_initial_h_profile(
-    #     drop_model.r, 0.8 * params.hmax0, params.r_c, order=4
-    # )
+    h_0 = utils.setup_parabolic_initial_h_profile(
+        drop_model.r, 0.8 * params.hmax0, params.r_c, order=4
+    )
 
     drop_viz.flow_viz(drop_model, h_0)
 
