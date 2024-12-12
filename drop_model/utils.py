@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 @dataclass
 class SimulationParams:
-    r_c: float  # Radius of the droplet in meters
+    r_grid: float  # Radius of the droplet in meters
     hmax0: float  # Initial droplet height at the center in meters
     Nr: int  # Number of radial points
     Nz: int  # Number of z-axis points
@@ -39,11 +39,14 @@ def setup_polynomial_initial_h_profile(r, h0, r_c, drop_fraction=1.0, order=2):
     return h
 
 
-def setup_cap_initial_h_profile(r, h0, r_c):
+def setup_cap_initial_h_profile(r_cap, h0, r_c):
+    h = torch.zeros_like(r_cap)
+    num_c = list(map(lambda i: i > -r_c, r_cap)).index(True) + 1
     # setup a spherical cap initial height profile
     R = (r_c**2 + h0**2) / (2 * h0)
     # theta = torch.arccos(torch.tensor([1 - h0 * R]))
-    h = torch.sqrt((2.0 * R * (r + R) - torch.square(r + R))) - (R - h0)
+    h[num_c:-(num_c)] = torch.sqrt((2.0 * R * (r_cap[num_c:-(num_c)] + R) - torch.square(r_cap[num_c:-(num_c)] + R))) - (R - h0)
+    #h = torch.sqrt((2.0 * R * (r + R) - torch.square(r + R))) - (R - h0)
 
     return h
 
@@ -59,6 +62,7 @@ def run_forward_euler_simulation(model, h0, t_lin, post_fn=None):
         )  # Print the current time step, use .item() to get the value
         dh_dt = model.calc_dh_dt(h)  # Compute dh/dt using the model
         h = h + dt * dh_dt  # Forward Euler step
+        h = torch.maximum(h, torch.tensor(0.0))  # Ensure non-negative height
         if post_fn is not None:
             h = post_fn(h)
         h_profiles.append(h.clone())  # Append a clone of the current height profile

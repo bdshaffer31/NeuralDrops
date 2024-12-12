@@ -114,8 +114,8 @@ def plot_velocity(drop_model, h, center_mask=6, corner_mask=3):
     u_grid = drop_model.calc_u_velocity(h)
     w_grid = drop_model.calc_w_velocity(h, u_grid)
 
-    u_grid[u_grid == 0.0] = torch.nan
-    w_grid[w_grid == 0.0] = torch.nan
+    #u_grid[u_grid == 0.0] = torch.nan
+    #w_grid[w_grid == 0.0] = torch.nan
     u_grid = set_nans_in_center(u_grid, center_mask)
     u_grid = set_nans_in_corners(u_grid, corner_mask)
     w_grid = set_nans_in_center(w_grid, center_mask)
@@ -127,8 +127,8 @@ def plot_velocity(drop_model, h, center_mask=6, corner_mask=3):
         aspect="auto",
         origin="lower",
         extent=[
-            -drop_model.params.r_c,
-            drop_model.params.r_c,
+            -drop_model.params.r_grid,
+            drop_model.params.r_grid,
             0,
             torch.max(drop_model.z),
         ],
@@ -158,8 +158,8 @@ def plot_velocity(drop_model, h, center_mask=6, corner_mask=3):
         aspect="auto",
         origin="lower",
         extent=[
-            -drop_model.params.r_c,
-            drop_model.params.r_c,
+            -drop_model.params.r_grid,
+            drop_model.params.r_grid,
             0,
             torch.max(drop_model.z),
         ],
@@ -191,7 +191,7 @@ def flow_viz(drop_model, h, center_mask=8, corner_mask=4, log_mag=False):
         flow_magnitude = torch.log(flow_magnitude)
     flow_magnitude = set_nans_in_center(flow_magnitude, center_mask)
     flow_magnitude = set_nans_in_corners(flow_magnitude, corner_mask)
-    flow_magnitude[flow_magnitude == 0.0] = torch.nan
+    #flow_magnitude[flow_magnitude == 0.0] = torch.nan
 
     plt.figure(figsize=(6, 3))
     plt.imshow(
@@ -199,8 +199,8 @@ def flow_viz(drop_model, h, center_mask=8, corner_mask=4, log_mag=False):
         aspect="auto",
         origin="lower",
         extent=[
-            -drop_model.params.r_c,
-            drop_model.params.r_c,
+            -drop_model.params.r_grid,
+            drop_model.params.r_grid,
             0,
             torch.max(drop_model.z),
         ],
