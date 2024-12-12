@@ -4,7 +4,6 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 import scipy.io
-import load_data_old
 from scipy.ndimage import median_filter, gaussian_filter
 
 

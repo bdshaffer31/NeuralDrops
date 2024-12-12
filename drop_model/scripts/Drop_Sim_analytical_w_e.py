@@ -286,7 +286,7 @@ def run_forward_euler_simulation(params, r, z, field_vars, h0):
         print(t, end="\r")
         dh_dt = calculate_dh_dt(t * params.dt, params, r, z, field_vars, h)
         h = h + params.dt * dh_dt  # Forward Euler step
-        #h = np.maximum(h, 0)  # Ensure non-negative height
+        h = np.maximum(h, 0)  # Ensure non-negative height
         h_profiles.append(h.copy())
 
     h_profiles = np.array(h_profiles)

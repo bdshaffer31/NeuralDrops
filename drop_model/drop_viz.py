@@ -55,9 +55,9 @@ def plot_height_profile_evolution(r, h_profiles, params, n_lines=5):
     """Plot the evolution of the height profile over time."""
     plt.figure(figsize=(6, 4))
     for i, h_t in enumerate(h_profiles[::50]):
-        plt.plot(r * 1e3, h_t * 1e3, c="dimgrey")
-    plt.plot(r * 1e3, h_profiles[0] * 1e3, c="k", label="h0")
-    plt.plot(r * 1e3, h_profiles[-1] * 1e3, c="r", label="Final")
+        plt.plot(r * 1e-3, h_t * 1e-3, c="dimgrey")
+    plt.plot(r * 1e-3, h_profiles[0] * 1e-3, c="k", label="h0")
+    plt.plot(r * 1e-3, h_profiles[-1] * 1e-3, c="r", label="Final")
     plt.xlabel("Radius (mm)")
     plt.ylabel("Height (mm)")
     plt.legend()
@@ -254,16 +254,20 @@ def flow_viz(drop_model, h, center_mask=8, corner_mask=4, log_mag=False):
     plt.legend()
     plt.show()
 
+
 def setup_tick_formatter(ax):
     formatter = ticker.ScalarFormatter(useMathText=True)
     formatter.set_scientific(True)
-    formatter.set_powerlimits((-0, 0))  # Force scientific notation for values between 10^-1 and 10^1
+    formatter.set_powerlimits(
+        (-0, 0)
+    )  # Force scientific notation for values between 10^-1 and 10^1
 
     ax.xaxis.set_major_formatter(formatter)
     ax.yaxis.set_major_formatter(formatter)
 
     # Ensure the ticks are redrawn
     ax.ticklabel_format(style="sci", axis="both", scilimits=(-0, 0))
+
 
 def set_nans_in_center(x, center_mask_size):
     if center_mask_size == 0:
@@ -290,6 +294,6 @@ def set_nans_in_corners(x, corner_mask_size=5):
     end_idx = non_zero_indices[-1]
     mask_start = min(start_idx + corner_mask_size, x.shape[0])
     mask_end = max(end_idx - corner_mask_size, 0)
-    x[start_idx:mask_start, :] = float('nan')
-    x[mask_end:end_idx + 1, :] = float('nan')
+    x[start_idx:mask_start, :] = float("nan")
+    x[mask_end : end_idx + 1, :] = float("nan")
     return x

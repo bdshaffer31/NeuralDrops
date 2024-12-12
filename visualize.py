@@ -3,10 +3,8 @@ import torch
 import numpy as np
 
 import logger
-import setup_dataloader
-import run_neural_ode
-import run_fno
-import run_flux_fno
+import load_data
+import run
 
 
 def fno_traj_pred_from_dataset(model, dataset, run_name, t_0_idx=1):
@@ -17,7 +15,7 @@ def fno_traj_pred_from_dataset(model, dataset, run_name, t_0_idx=1):
             .unsqueeze(0)
             .expand(len(time_steps), -1)
         )
-        conditioning = dataset.get_conditioning(run_name)
+        conditioning = dataset.get_conditioning(dataset.data[run_name])
         conditioning = conditioning.unsqueeze(0).expand(len(time_steps), -1)
         time_steps = time_steps.unsqueeze(1)
         pred_traj = model(initial_state, conditioning, time_steps).squeeze()
@@ -26,7 +24,7 @@ def fno_traj_pred_from_dataset(model, dataset, run_name, t_0_idx=1):
 
 def node_traj_pred_from_dataset(model, dataset, run_name, t_0_idx=1):
     with torch.no_grad():
-        conditioning = dataset.get_conditioning(run_name)
+        conditioning = dataset.get_conditioning(dataset.data[run_name])
         initial_state = dataset.data[run_name]["profile"][t_0_idx].unsqueeze(0)
         time_steps = dataset.data[run_name]["t"][t_0_idx:]
         print(initial_state.shape, conditioning.shape, time_steps.shape)
@@ -34,9 +32,9 @@ def node_traj_pred_from_dataset(model, dataset, run_name, t_0_idx=1):
         return pred_traj
 
 
-def flux_fno_traj_pred_from_dataset(model, dataset, run_name, t_0_idx=1):
+def fno_node_traj_pred_from_dataset(model, dataset, run_name, t_0_idx=1):
     with torch.no_grad():
-        conditioning = dataset.get_conditioning(run_name).unsqueeze(0)
+        conditioning = dataset.get_conditioning(dataset.data[run_name]).unsqueeze(0)
         initial_state = dataset.data[run_name]["profile"][t_0_idx].unsqueeze(0)
         time_steps = dataset.data[run_name]["t"][t_0_idx:]
         pred_traj = model(initial_state, conditioning, time_steps).squeeze()
@@ -52,11 +50,11 @@ def trajectory_pred(model_type, model, dataset, run_name, t_0_idx=1):
         pred_traj = fno_traj_pred_from_dataset(
             model, dataset, run_name, t_0_idx=t_0_idx
         )
-    elif model_type == "flux_fno":
-        pred_traj = flux_fno_traj_pred_from_dataset(
+    elif model_type == "fno_node":
+        pred_traj = fno_node_traj_pred_from_dataset(
             model, dataset, run_name, t_0_idx=t_0_idx
         )
-    return pred_traj
+    return pred_traj / dataset.profile_scale
 
 
 def viz_results(run_dir):
@@ -66,17 +64,11 @@ def viz_results(run_dir):
     train_losses = metrics["train_mse"]
     val_losses = metrics["val_mse"]
 
-    dataset = setup_dataloader.setup_data(config)[2]
+    dataset = load_data.setup_data_from_config(config)[2]
 
-    if config["model_type"] == "node":
-        model = run_neural_ode.load_node_model_from_logger(log_loader)
-    elif config["model_type"] == "fno":
-        model = run_fno.load_fno_model_from_logger(log_loader)
-    elif config["model_type"] == "flux_fno":
-        model = run_flux_fno.load_fno_model_from_logger(log_loader)
+    model = run.load_model_from_log_loader(log_loader)
 
-    # file name for detailed visualization
-    viz_file = dataset.valid_files[0]
+    viz_file = list(dataset.data.keys())[0]
 
     plot_train_val_error(log_loader, train_losses, val_losses)
     height_data = dataset.data[viz_file]["profile"]
