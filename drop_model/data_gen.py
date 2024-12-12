@@ -77,6 +77,13 @@ def main():
         h0 = polynomial_init(x_lin, params.hmax0, alpha, beta, gamma, 0.0)
         h_history = run_sim(h0, params, t_lin)[:-1]
         # print(h_history.shape, t_lin.shape)
+
+        # Saved dataset MUST have:
+        # "profile": profile,
+        # "t_lin": t_lin,
+        # "r_lin": r_lin,
+        # "z_lin": z_lin,
+        # and can additionally have any number of extra contents or conditioning data
         current_result = {
             "profile": h_history.to(torch.float32),
             "alpha": alpha,
