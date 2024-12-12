@@ -73,7 +73,7 @@ def main(train=False):
         "manual_seed": 42,
         "num_epochs": 10,
         "lr": 1e-2,
-        "model_type": "fno",  # specify model type
+        "model_type": "flux_fno",  # specify model type
         "data_file": "data/simulation_results.pth",  # specify data type
         "batch_size": 32,
         "val_ratio": 0.1,
