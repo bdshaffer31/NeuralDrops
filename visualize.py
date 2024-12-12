@@ -76,7 +76,8 @@ def viz_results(run_dir):
         model = run_flux_fno.load_fno_model_from_logger(log_loader)
 
     # file name for detailed visualization
-    viz_file = dataset.valid_files[0]
+    # viz_file = dataset.valid_files[0]
+    viz_file = list(dataset.data.keys())[0]
 
     plot_train_val_error(log_loader, train_losses, val_losses)
     height_data = dataset.data[viz_file]["profile"]

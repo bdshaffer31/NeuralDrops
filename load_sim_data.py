@@ -2,6 +2,7 @@ import torch
 from torch.utils.data import Dataset
 from load_exp_data import Standardizer
 
+
 class SimulationDataLoader:
     def __init__(self, file_path):
         self.file_path = file_path
@@ -12,6 +13,7 @@ class SimulationDataLoader:
 
     def get_data(self):
         return self.data
+
 
 class SimulationTransformer:
     def __init__(self, conditioning_keys=["alpha", "beta", "gamma"]):
@@ -26,7 +28,7 @@ class SimulationTransformer:
         conditioning_values = {key: [] for key in self.conditioning_keys}
 
         for sample in data.values():
-            profiles.append(torch.tensor(sample["profile"], dtype=torch.float32))
+            profiles.append(torch.tensor(sample["profile"]))  # , dtype=torch.float32
             for key in self.conditioning_keys:
                 conditioning_values[key].append(sample[key])
 
@@ -36,17 +38,20 @@ class SimulationTransformer:
 
         # Fit standardizers for each conditioning key
         for key in self.conditioning_keys:
-            values = torch.tensor(conditioning_values[key], dtype=torch.float32)
+            values = torch.tensor(conditioning_values[key])  # , dtype=torch.float32
             self.conditioning_standardizers[key] = Standardizer(values)
 
     def transform(self, sample):
         """Standardize the profile and conditioning variables in a sample."""
-        profile = torch.tensor(sample["profile"], dtype=torch.float32)
+        profile = torch.tensor(sample["profile"])  # , dtype=torch.float32
         standardized_profile = self.profile_standardizer.apply(profile)
 
         standardized_conditioning = torch.tensor(
-            [self.conditioning_standardizers[key].apply(torch.tensor(sample[key])) for key in self.conditioning_keys],
-            dtype=torch.float32
+            [
+                self.conditioning_standardizers[key].apply(torch.tensor(sample[key]))
+                for key in self.conditioning_keys
+            ],
+            dtype=torch.float32,
         )
 
         return standardized_profile, standardized_conditioning
@@ -58,10 +63,10 @@ class SimulationTransformer:
     def inverse_transform_conditioning(self, conditioning):
         """Unstandardize conditioning values."""
         unstandardized = [
-            self.conditioning_standardizers[key].inverse_apply(cond) 
+            self.conditioning_standardizers[key].inverse_apply(cond)
             for key, cond in zip(self.conditioning_keys, conditioning)
         ]
-        return torch.tensor(unstandardized, dtype=torch.float32)
+        return torch.tensor(unstandardized)  # , dtype=torch.float32
 
 
 class SimulationDataset(Dataset):
@@ -71,30 +76,49 @@ class SimulationDataset(Dataset):
             data (dict): Dictionary of simulation results.
             transformer (SimulationTransformer): Transformer for standardization.
         """
-        self.data = data
+        self.raw_data = data
         self.transformer = transformer
         self.conditioning_keys = conditioning_keys
         self.keys = list(data.keys())  # To access each entry by index
-    
+        self.data = self.norm_data()
+
+    def norm_data(self):
+        norm_data = {}
+        for key in self.raw_data:
+            norm_contents = {
+                "profile": self.transformer.profile_standardizer(
+                    self.raw_data[key]["profile"]
+                ),
+                "alpha": self.raw_data[key]["alpha"],
+                "beta": self.raw_data[key]["beta"],
+                "gamma": self.raw_data[key]["gamma"],
+                "t": self.raw_data[key]["t"],
+            }
+            norm_data[key] = norm_contents
+        return norm_data
+
     def get_conditioning(self, sample):
         conditioning = torch.tensor(
-            [self.data[sample][key] for key in self.conditioning_keys],
+            [self.raw_data[sample][key] for key in self.conditioning_keys],
             # dtype=self.transformer.dtype,
         )
         return conditioning
 
     def __len__(self):
-        return len(self.data)
+        return len(self.raw_data)
 
     def __getitem__(self, idx):
         key = self.keys[idx]
-        sample = self.data[key]
-        standardized_profile, standardized_conditioning = self.transformer.transform(sample)
+        sample = self.raw_data[key]
+        standardized_profile, standardized_conditioning = self.transformer.transform(
+            sample
+        )
         return standardized_profile, standardized_conditioning
 
 
 def main():
     import matplotlib.pyplot as plt
+
     # Load the data using the SimulationDataLoader
     loader = SimulationDataLoader("data/simulation_results.pth")
     data = loader.get_data()
@@ -110,11 +134,14 @@ def main():
     for profile, conditioning in dataset:
         print("Standardized Profile shape:", profile.shape)
         print("Standardized Conditioning values:", conditioning)
+        print(profile.dtype)
 
     # Example: Unstandardize a profile and conditioning
     profile, conditioning = dataset[0]
     unstandardized_profile = transformer.inverse_transform_profile(profile)
-    unstandardized_conditioning = transformer.inverse_transform_conditioning(conditioning)
+    unstandardized_conditioning = transformer.inverse_transform_conditioning(
+        conditioning
+    )
 
     print("Unstandardized Profile:", unstandardized_profile)
     print("Unstandardized Conditioning:", unstandardized_conditioning)

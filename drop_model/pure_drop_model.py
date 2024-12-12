@@ -10,9 +10,7 @@ class PureDropModel:
         self.smoothing_fn = smoothing_fn
 
     def setup_grids(self):
-        r = torch.linspace(
-            -self.params.r_c, self.params.r_c, self.params.Nr
-        )
+        r = torch.linspace(-self.params.r_c, self.params.r_c, self.params.Nr)
         z = torch.linspace(0, self.params.hmax0, self.params.Nz)
         return r, z
 
@@ -196,8 +194,8 @@ def main():
     drop_viz.flow_viz(drop_model, h_0, 0, 0)
 
     def post_fn(h):
-        h = torch.clamp(h, min=0) # ensure non-negative height
-        h = utils.drop_polynomial_fit(h, 8) # project height on polynomial basis
+        h = torch.clamp(h, min=0)  # ensure non-negative height
+        h = utils.drop_polynomial_fit(h, 8)  # project height on polynomial basis
         return h
 
     h_history = utils.run_forward_euler_simulation(drop_model, h_0, t_lin, post_fn)

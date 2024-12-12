@@ -135,6 +135,7 @@ def run_training(config, run_dir):
         exp_logger,
     )
 
+
 # def main(train=False):
 #     config = {
 #         # training params

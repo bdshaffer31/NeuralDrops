@@ -41,6 +41,7 @@ class NODEDataset(Dataset):
     def __getitem__(self, idx):
         return self.samples[idx]
 
+
 class FNODataset(Dataset):
     def __init__(self, profile_data, num_time_points=10):
         self.profile_data = profile_data
@@ -66,8 +67,7 @@ class FNODataset(Dataset):
         return len(self.samples)
 
     def __getitem__(self, idx):
-        h_0, z, t, h_t = self.samples[idx]
-        return h_0, z, t, h_t
+        return self.samples[idx]
 
 
 # def setup_data(config):
@@ -108,26 +108,21 @@ class FNODataset(Dataset):
 def setup_data(config):
     data_config = config["data_config"]
     if config["data_type"] == "exp":
-        from load_exp_data import ExperimentDataLoader
-        from load_exp_data import ExperimentTransformer
-        from load_exp_data import ExperimentDataset
-        data_loader = ExperimentDataLoader(
+        from load_exp_data import ProfileDataset
+
+        profile_data = ProfileDataset(
             data_dir=data_config["data_dir"],
             experiment_numbers=data_config["exp_nums"],
             valid_solutes=data_config["valid_solutes"],
             valid_substrates=data_config["valid_substrates"],
-            valid_temps=data_config["valid_temps"]
-        )
-        transformer = ExperimentTransformer(
+            valid_temps=data_config["valid_temps"],
             temporal_subsample=data_config["temporal_subsample"],
             spatial_subsample=data_config["spatial_subsample"],
             axis_symmetric=data_config["axis_symmetric"],
             temporal_pad=data_config["temporal_pad"],
             dtype=torch.float32,
-            use_log_transform=data_config["use_log_transform"])
-
-        # Create Dataset
-        profile_data = ExperimentDataset(data_loader, transformer)
+            use_log_transform=data_config["use_log_transform"],
+        )
 
     elif config["data_type"] == "sim":
         # Load simulation data
@@ -141,7 +136,9 @@ def setup_data(config):
 
         # Set up the transformer and fit it to the data
         transformer = SimulationTransformer(
-            conditioning_keys=data_config.get("conditioning_keys", ["alpha", "beta", "gamma"])
+            conditioning_keys=data_config.get(
+                "conditioning_keys", ["alpha", "beta", "gamma"]
+            )
         )
         transformer.fit(sim_data)
 
@@ -149,7 +146,9 @@ def setup_data(config):
         profile_data = SimulationDataset(sim_data, transformer)
 
     else:
-        raise ValueError("Invalid data_type in config. Must be 'experimental' or 'simulation'.")
+        raise ValueError(
+            "Invalid data_type in config. Must be 'experimental' or 'simulation'."
+        )
 
     if config["model_type"] in ["node", "flux_fno"]:
         dataset = NODEDataset(profile_data=profile_data, traj_len=config["traj_len"])
@@ -166,6 +165,8 @@ def setup_data(config):
     train_loader = DataLoader(
         train_dataset, batch_size=data_config["batch_size"], shuffle=True
     )
-    val_loader = DataLoader(val_dataset, batch_size=data_config["batch_size"], shuffle=False)
+    val_loader = DataLoader(
+        val_dataset, batch_size=data_config["batch_size"], shuffle=False
+    )
 
-    return train_loader, val_loader, dataset
+    return train_loader, val_loader, profile_data

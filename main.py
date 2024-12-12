@@ -2,11 +2,12 @@ import torch
 import utils
 import visualize
 
+
 def experiment_data_config():
     data_config = {
         "data_dir": "data",
         "batch_size": 32,
-        "exp_nums": utils.good_run_numbers()[:10],  # None = use all experiments
+        "exp_nums": utils.good_run_numbers()[:1],  # None = use all experiments
         "valid_solutes": None,  # None = keep all solutes
         "valid_substrates": None,  # None = keep all substrates
         "valid_temps": None,  # None = keep all temperatures
@@ -19,6 +20,7 @@ def experiment_data_config():
     }
     return data_config
 
+
 def simulation_data_config():
     data_config = {
         "data_dir": "data",
@@ -28,6 +30,7 @@ def simulation_data_config():
         "val_ratio": 0.1,
     }
     return data_config
+
 
 def flux_fno_model_config():
     model_config = {
@@ -42,6 +45,7 @@ def flux_fno_model_config():
     }
     return model_config
 
+
 def fno_model_config():
     model_config = {
         # "model_type": "fno",
@@ -54,6 +58,7 @@ def fno_model_config():
     }
     return model_config
 
+
 def node_model_config():
     model_config = {
         # "model_type": "node",
@@ -65,6 +70,7 @@ def node_model_config():
     }
     return model_config
 
+
 def get_model_config(model_type):
     model_configs = {
         "fno": fno_model_config,
@@ -73,6 +79,7 @@ def get_model_config(model_type):
     }
     return model_configs[model_type]()
 
+
 def get_data_config(data_type):
     data_configs = {
         "exp": experiment_data_config,
@@ -80,21 +87,21 @@ def get_data_config(data_type):
     }
     return data_configs[data_type]()
 
+
 def main(train=False):
     # if a config file isn't provided load from options
     run_config = {
         "manual_seed": 42,
         "num_epochs": 10,
         "lr": 1e-2,
-        "model_type": "fno", # specify model type
-        "data_type": "sim", # specify data type
+        "model_type": "fno",  # specify model type
+        "data_type": "sim",  # specify data type
     }
     run_config["model_config"] = get_model_config(run_config["model_type"])
     run_config["data_config"] = get_data_config(run_config["data_type"])
 
     torch.manual_seed(run_config["manual_seed"])
-    torch.set_default_dtype(torch.float64)
-
+    torch.set_default_dtype(torch.float32)
 
     if run_config["model_type"] == "node":
         from run_neural_ode import run_training

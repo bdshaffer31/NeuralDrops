@@ -6,6 +6,7 @@ from drop_model.pure_drop_model import PureDropModel
 import drop_model.utils as utils
 import drop_model.drop_viz as drop_viz
 
+
 def default_params():
     params = utils.SimulationParams(
         r_c=1e-3,  # Radius of the droplet in meters
@@ -20,8 +21,8 @@ def default_params():
     )
     return params
 
+
 def run_sim(h0, params, t_lin):
-    
     def evap_model(h, kappa=1e-3):
         return -kappa * torch.arange(len(h)) / len(h)
 
@@ -29,8 +30,8 @@ def run_sim(h0, params, t_lin):
         return utils.gaussian_blur_1d(x, sigma=10)
 
     def post_fn(h):
-        h = torch.clamp(h, min=0) # ensure non-negative height
-        h = utils.drop_polynomial_fit(h, 8) # project height on polynomial basis
+        h = torch.clamp(h, min=0)  # ensure non-negative height
+        h = utils.drop_polynomial_fit(h, 8)  # project height on polynomial basis
         return h
 
     drop_model = PureDropModel(params, evap_model=evap_model, smoothing_fn=smoothing_fn)
@@ -39,12 +40,14 @@ def run_sim(h0, params, t_lin):
 
     return h_history
 
+
 def polynomial_init(r, hmax0, alpha, beta, gamma, epsilon):
-    y = 1 - (alpha*r**2 + beta*r**4 + gamma*r**6 + epsilon*r**8)
+    y = 1 - (alpha * r**2 + beta * r**4 + gamma * r**6 + epsilon * r**8)
     y -= torch.min(y)
     y /= torch.max(y)
     y *= hmax0
     return y
+
 
 def main():
     drop_viz.set_styling()
@@ -53,38 +56,37 @@ def main():
     params = default_params()
     r_lin = torch.linspace(-params.r_c, params.r_c, params.Nr)
     x_lin = torch.linspace(-1, 1, params.Nr)
-    Nt=1000
-    dt=1e-4
+    Nt = 500
+    dt = 5e-4
     t_lin = torch.linspace(0, dt * Nt, Nt)
-
 
     for i in range(10):
         alpha = np.random.rand()
         beta = np.random.rand()
         gamma = np.random.rand()
         y = polynomial_init(x_lin, params.hmax0, alpha, beta, gamma, 0.0)
-        plt.plot(r_lin, y, alpha=0.2,c='k')
+        plt.plot(r_lin, y, alpha=0.2, c="k")
     plt.show()
 
     # generate the datasets
     results = {}
-    for i in range(10):
+    for i in range(3):
         alpha = np.random.rand()
         beta = np.random.rand()
         gamma = np.random.rand()
         h0 = polynomial_init(x_lin, params.hmax0, alpha, beta, gamma, 0.0)
-        h_history = run_sim(h0, params, t_lin)
+        h_history = run_sim(h0, params, t_lin)[:-1]
+        # print(h_history.shape, t_lin.shape)
         current_result = {
-            "profile": h_history,
+            "profile": h_history.to(torch.float32),
             "alpha": alpha,
             "beta": beta,
             "gamma": gamma,
-            "t": t_lin,
+            "t": t_lin.to(torch.float32),
         }
         results[i] = current_result
 
     torch.save(results, "data/simulation_results.pth")
-
 
 
 if __name__ == "__main__":
