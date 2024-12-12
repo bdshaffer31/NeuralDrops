@@ -1,1 +1,2 @@
 *.pptx filter=lfs diff=lfs merge=lfs -text
+data/drop_data.pth filter=lfs diff=lfs merge=lfs -text
