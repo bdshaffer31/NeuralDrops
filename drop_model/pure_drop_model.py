@@ -89,6 +89,44 @@ class PureDropModel:
         dz = z[1] - z[0]
         masked_grid = grid_data.clone()
 
+        lower_indices = torch.searchsorted(z, h)
+        #valid_mask = (lower_indices >= 0) & (lower_indices < len(z) - 1)
+
+        def mask(h_r, lower_index_in, z_in):
+            #z_below = z_in[lower_index_in]
+            z_below = torch.index_select(z_in, 0, lower_index_in)
+            
+            value_above = masked_grid[1, lower_index_in]
+            occupation_percent = (h_r - z_below) / dz
+            masked_grid[1, lower_index_in] = occupation_percent * value_above
+
+            masked_grid[1, lower_index_in + 1 :] = 0
+            return masked_grid
+        
+        masked_grid = torch.vmap(mask, in_dims = (0, 0, None))(h, lower_indices, z)
+
+        return masked_grid
+    
+    def interp_h_mask_grid_old_old(grid_data, h, z):
+        dz = z[1] - z[0]
+        masked_grid = np.array(grid_data)
+        for i in range(masked_grid.shape[0]):
+            h_r = h[i]
+            lower_index = np.searchsorted(z, h_r) - 1  # last index beneath boundary
+            if 0 <= lower_index < len(z) - 1:
+                z_below = z[lower_index]
+                value_above = masked_grid[i, lower_index + 1]
+                occupation_percent = (h_r - z_below) / dz
+                masked_grid[i, lower_index + 1] = occupation_percent * value_above
+                masked_grid[i, lower_index + 2 :] = 0
+            elif 0 >= lower_index:
+                masked_grid[i, :] = 0
+        return masked_grid
+    
+    def interp_h_mask_grid_old(self, grid_data, h, z):
+        dz = z[1] - z[0]
+        masked_grid = grid_data.clone()
+
         lower_indices = torch.searchsorted(z, h) - 1
         valid_mask = (lower_indices >= 0) & (lower_indices < len(z) - 1)
 

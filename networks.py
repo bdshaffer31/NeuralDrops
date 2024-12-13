@@ -232,44 +232,48 @@ class FNO_Flux(FNO):
 
 
 class FNOFluxODEWrapper(nn.Module):
-    def __init__(self, model, flow_model=None):
+    def __init__(self, model, flow_model=None, profile_scaler=1):
         super(FNOFluxODEWrapper, self).__init__()
         self.evap_model = model
         self.flow_model = flow_model
+        self.profile_scaler = profile_scaler
         self.conditioning = None
 
     def set_conditioning(self, z):
         self.conditioning = z
 
-    def forward(self, t, h):
-        # Predict the evaporative flux
-        #print(h.dtype)
-        #print(h.shape)
+    def forward(self, t, h): # Predict dh_dt
+
         # TODO getting complex h values
         if self.flow_model is None:
-            flux = self.model(h, self.conditioning)
+            flux = self.evap_model(h, self.conditioning)
             return -flux # Negative sign to represent evaporation
         
-        # TODO actually we need to wrap the drop model to handle batching (with vmap)?
-        flow_model = torch.vmap(self.flow_model.calc_flow_dh_dt, in_dims=0)
+        def flow_model_scaled(h_in):
+            h_in *= self.profile_scale
+            flow_dh_dt = self.flow_model.calc_flow_dh_dt(h_in)
+            return flow_dh_dt / self.profile_scale
+        
+        flow_model = torch.vmap(flow_model_scaled, in_dims=0)
 
-        return flow_model(h) + self.evap_model(h, self.conditioning)
+        return flow_model(h) - self.evap_model(h, self.conditioning)
 
 
 class FNOFluxODESolver(nn.Module):
-    def __init__(self, ode_func, solver_type="rk4"):
+    def __init__(self, ode_func, time_step=1, solver_type="rk4"):
         super(FNOFluxODESolver, self).__init__()
         self.ode_func = ode_func
         self.solver_type = solver_type
         self.solver = self.init_solver()
+        self.time_step = time_step
 
     def init_solver(self):
         if self.solver_type == "euler":
-            return ForwardEuler(self.ode_func)
+            return ForwardEuler(self.ode_func, self.time_step)
         elif self.solver_type == "rk4":
-            return RK4(self.ode_func)
+            return RK4(self.ode_func, self.time_step)
         elif self.solver_type == "implicit_euler":
-            return ImplicitEuler(self.ode_func)
+            return ImplicitEuler(self.ode_func, self.time_step)
 
     def forward(self, *args):
         return self.solver.forward(*args)
@@ -278,14 +282,15 @@ class FNOFluxODESolver(nn.Module):
 class ForwardEuler(nn.Module):
     """Explicit forward Euler solver"""
 
-    def __init__(self, ode_func):
+    def __init__(self, ode_func, time_step):
         super(ForwardEuler, self).__init__()
         self.ode_func = ode_func
+        self.time_step = time_step
 
     def forward(self, x0, z, t):
         self.ode_func.set_conditioning(z)
         num_steps = len(t)
-        dt = t[1] - t[0]
+        dt = (t[1] - t[0])*self.time_step
         x_history = torch.zeros(
             (num_steps, *x0.shape), dtype=x0.dtype, device=x0.device
         )
@@ -302,14 +307,15 @@ class ForwardEuler(nn.Module):
 class RK4(nn.Module):
     """Explicit RK4 solver"""
 
-    def __init__(self, ode_func):
+    def __init__(self, ode_func, time_step):
         super(RK4, self).__init__()
         self.ode_func = ode_func
+        self.time_step = time_step
 
     def forward(self, x0, z, t):
         self.ode_func.set_conditioning(z)
         num_steps = len(t)
-        dt = t[1] - t[0]
+        dt = (t[1] - t[0])*self.time_step
         x_history = torch.zeros(
             (num_steps, *x0.shape), dtype=x0.dtype, device=x0.device
         )
@@ -333,16 +339,17 @@ class RK4(nn.Module):
 class ImplicitEuler(nn.Module):
     """Implicit (Backward) Euler solver"""
 
-    def __init__(self, ode_func, num_iterations=3):
+    def __init__(self, ode_func, time_step, num_iterations=3):
         super(ImplicitEuler, self).__init__()
         self.ode_func = ode_func
         self.num_iterations = num_iterations
+        self.time_step = time_step
 
     def forward(self, x0, z, t):
         self.ode_func.set_conditioning(z)
 
         num_steps = len(t)
-        dt = t[1] - t[0]
+        dt = (t[1] - t[0])*self.time_step
         x_history = torch.zeros(
             (num_steps, *x0.shape), dtype=x0.dtype, device=x0.device
         )
