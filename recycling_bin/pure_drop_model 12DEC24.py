@@ -87,35 +87,45 @@ class PureDropModel:
         w_grid[w_grid < -10] = -10
         return w_grid
 
-
-    #u_grid = self.interp_h_mask_grid(u_grid, h, self.z)
-    def interp_h_mask_grid(self, grid_data, h, z):
+    def interp_h_mask_grid_new(self, grid_data, h, z):
         dz = z[1] - z[0]
         masked_grid = grid_data.clone()
 
         lower_indices = torch.searchsorted(z, h)
         #valid_mask = (lower_indices >= 0) & (lower_indices < len(z) - 1)
 
-        def mask(masked_grid_in, h_r, lower_index_in, z_in):
+        def mask(h_r, lower_index_in, z_in):
+            #z_below = z_in[lower_index_in]
             z_below = torch.index_select(z_in, 0, lower_index_in)
             
-            value_above = torch.index_select(masked_grid_in, 0, lower_index_in)
+            value_above = masked_grid[1, lower_index_in]
             occupation_percent = (h_r - z_below) / dz
-            masked_grid_in[lower_index_in] = occupation_percent * value_above
+            masked_grid[1, lower_index_in] = occupation_percent * value_above
 
-            #TODO !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-            idx = lower_index_in.int() + 1
-            #masked_grid_in[idx :] = 0
-            masked_grid_in[5 :] = 0
-            #TODO !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-            return masked_grid_in
-        h = torch.unsqueeze(h, 1)
-        lower_indices = torch.unsqueeze(lower_indices, 1)
+            masked_grid[1, lower_index_in + 1 :] = 0
+            return masked_grid
+        
+        masked_grid = torch.vmap(mask, in_dims = (0, 0, None))(h, lower_indices, z)
 
-        masked_grid = torch.vmap(mask, in_dims = (0, 0, 0, None))(masked_grid, h, lower_indices, z)
         return masked_grid
     
-    def interp_h_mask_grid_old(self, grid_data, h, z):
+    def interp_h_mask_grid_old_old(grid_data, h, z):
+        dz = z[1] - z[0]
+        masked_grid = np.array(grid_data)
+        for i in range(masked_grid.shape[0]):
+            h_r = h[i]
+            lower_index = np.searchsorted(z, h_r) - 1  # last index beneath boundary
+            if 0 <= lower_index < len(z) - 1:
+                z_below = z[lower_index]
+                value_above = masked_grid[i, lower_index + 1]
+                occupation_percent = (h_r - z_below) / dz
+                masked_grid[i, lower_index + 1] = occupation_percent * value_above
+                masked_grid[i, lower_index + 2 :] = 0
+            elif 0 >= lower_index:
+                masked_grid[i, :] = 0
+        return masked_grid
+    
+    def interp_h_mask_grid(self, grid_data, h, z):
         dz = z[1] - z[0]
         masked_grid = grid_data.clone()
 
@@ -175,6 +185,26 @@ def main():
     drop_viz.set_styling()
     torch.set_default_dtype(torch.float64)
 
+    #from recycling_bin.load_data_old import ProfileDataset
+
+    #dataset = ProfileDataset(
+    #    "data", [40], axis_symmetric=False, spatial_subsample=6, temporal_subsample=24
+    #)
+    #viz_file = dataset.valid_files[0]
+    #h_0 = dataset.data[viz_file]["profile"][1]
+    #h_0 = dataset.profile_scaler.inverse_apply(h_0)
+    #print(torch.max(h_0), torch.min(h_0))
+    #h_0 -= torch.min(h_0)
+    #h_0 -= 0.6
+    #h_0 = torch.clamp(h_0, min=0.0)
+    #h_0 = h_0.to(torch.float64)
+    #h_0 = utils.drop_polynomial_fit(h_0, 8)
+
+    #h_0 *= 0.000003 * 100
+    #r_c = 0.000003 * 640
+    #maxh0 = torch.max(h_0).item() * 1.2
+    #print(h_0.shape, maxh0, print(r_c))
+
     # TODO consider doing something different with these
     params = utils.SimulationParams(
         r_grid=1.0e-3,  # Radius of the droplet in meters
@@ -199,23 +229,22 @@ def main():
     )
     Nt = 3000
 
-    dt = 1e-2
+    dt = 1e-3
     t_lin = torch.linspace(0, dt * Nt, Nt)
 
     def smoothing_fn(x):
         return utils.gaussian_blur_1d(x, sigma=10)
 
-    # Working Evap Choices: [no_evap_model, constant_evap_model, deegan_evap_model]
-    drop_model = PureDropModel(params, evap_model=evap_models.deegan_evap_model, smoothing_fn=smoothing_fn)
+    drop_model = PureDropModel(params, evap_model=evap_models.evap_model, smoothing_fn=smoothing_fn)
 
     r_c = 0.5*params.r_grid
 
-    h_0 = utils.setup_polynomial_initial_h_profile(
-        drop_model.r, 0.8 * params.hmax0, r_c, order=4
-    )
-
-    #h_0 = utils.setup_cap_initial_h_profile(drop_model.r, 0.8 * params.hmax0, r_c
+    #h_0 = utils.setup_polynomial_initial_h_profile(
+    #    drop_model.r, 0.8 * params.hmax0, r_c, order=4
     #)
+
+    h_0 = utils.setup_cap_initial_h_profile(drop_model.r, 0.8 * params.hmax0, r_c
+    )
 
     drop_viz.flow_viz(drop_model, h_0, 0, 0)
 

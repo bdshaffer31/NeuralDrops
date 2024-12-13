@@ -2,7 +2,10 @@ import torch
 import numpy as np
 import scipy.integrate as integrate
 
-def evap_model(params, h, z = None, kappa=0.0e-3):
+def no_evap_model(params, h, z = None, kappa=0.0e-3):
+    return -kappa * torch.ones_like(h)
+
+def constant_evap_model(params, h, z = None, kappa=1.0e-7):
     return -kappa * torch.ones_like(h)
 
 def deegan_evap_model(params, r, h):

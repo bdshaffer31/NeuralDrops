@@ -32,9 +32,9 @@ def setup_polynomial_initial_h_profile(r, h0, r_c, drop_fraction=1.0, order=2):
     # setup up a polynomial initial drop profile
     drop_fraction = 1.0  # percent of r taken up with drop (vs 0)
     h = torch.zeros_like(r)
-    occupied_length = int(drop_fraction * len(r))
-    h[:occupied_length] = h0 * (
-        1 - (r[:occupied_length] / (drop_fraction * r_c)) ** order
+    num_c = list(map(lambda i: i > -r_c, r)).index(True) + 1
+    h[num_c:-(num_c)] = h0 * (
+        1 - (r[num_c:-(num_c)]  / (drop_fraction * r_c)) ** order
     )
     return h
 

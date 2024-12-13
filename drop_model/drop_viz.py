@@ -191,7 +191,7 @@ def flow_viz(drop_model, h, center_mask=8, corner_mask=4, log_mag=False):
         flow_magnitude = torch.log(flow_magnitude)
     flow_magnitude = set_nans_in_center(flow_magnitude, center_mask)
     flow_magnitude = set_nans_in_corners(flow_magnitude, corner_mask)
-    #flow_magnitude[flow_magnitude == 0.0] = torch.nan
+    flow_magnitude[flow_magnitude == 0.0] = torch.nan
 
     plt.figure(figsize=(6, 3))
     plt.imshow(
