@@ -43,6 +43,7 @@ def fno_model_config():
     return model_config
 
 
+
 def node_model_config():
     model_config = {
         # "model_type": "node",
@@ -72,6 +73,7 @@ def main(train=False):
         "run_dir": run_dir,
         "manual_seed": 42,
         "num_epochs": 10,
+        "traj_len": 10,
         "lr": 1e-2,
         "model_type": "flux_fno",  # specify model type
         "data_file": "data/simulation_results.pth",  # specify data type
@@ -93,4 +95,4 @@ def main(train=False):
 
 
 if __name__ == "__main__":
-    main(train=False)
+    main(train=True)

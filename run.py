@@ -148,14 +148,37 @@ def init_flux_fno(model_config):
         num_fc_layers=model_config["num_fc_layers"],
         fc_width=model_config["fc_width"],
     )
+    
+    from drop_model import pure_drop_model, utils
+    def smoothing_fn(x):
+        return utils.gaussian_blur_1d(x, sigma=10)
+    
+    params = utils.SimulationParams(
+        r_grid=1.0e-3,  # Radius of the droplet in meters
+        hmax0=3e-4,  # Initial droplet height at the center in meters
+        Nr=214,  # Number of radial points
+        Nz=110,  # Number of z-axis points
+        dr= 2 * 1.0e-3 / (214 - 1),  # Radial grid spacing
+        dz=3e-4 / (110 - 1),  # Vertical grid spacing
+        rho=1,  # Density of the liquid (kg/m^3) eg 1
+        sigma=0.072,  # Surface tension (N/m) eg 0.072
+        eta=1e-3,  # Viscosity (Pa*s) eg 1e-5
+
+        A = 8.07131, # Antoine Equation (-)
+        B = 1730.63, # Antoine Equation (-)
+        C = 233.4, # Antoine Equation (-)
+        D = 2.42e-5, # Diffusivity of H2O in Air (m^2/s)
+        Mw = 0.018, # Molecular weight H2O vapor (kg/mol)
+        Rs = 461.5, # Gas Constant (J/(K*kg))
+        T = 293.15, # Ambient Temperature (K)
+        RH = 0.20, # Relative Humidity (-)
+    )
 
     # ========= PSUEDO code ==================
     # get needed params, might have to load data from config here unfortunately
-    drop_model = drop_model(...) #, evap_model=fno_model)
-    # TODO actually we need to wrap the drop model to handle batching (with vmap)?
-    drop_model = networks.NeuralDropModel(..., evap_model=fno_model)
+    flow_model = pure_drop_model.PureDropModel(params, smoothing_fn=smoothing_fn)
 
-    ode_func = networks.FNOFluxODEWrapper(drop_model)
+    ode_func = networks.FNOFluxODEWrapper(fno_model, flow_model)
     model = networks.FNOFluxODESolver(ode_func, solver_type=model_config["solver"])
     return model
 

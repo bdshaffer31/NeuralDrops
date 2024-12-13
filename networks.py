@@ -174,6 +174,7 @@ class SpectralConv1d(nn.Module):
         # Perform Inverse FFT
         x = torch.fft.irfft(out_ft, n=x.size(-1))
         return x
+    
 
 
 # ================================
@@ -231,9 +232,10 @@ class FNO_Flux(FNO):
 
 
 class FNOFluxODEWrapper(nn.Module):
-    def __init__(self, fno_model):
+    def __init__(self, model, flow_model=None):
         super(FNOFluxODEWrapper, self).__init__()
-        self.fno_model = fno_model
+        self.evap_model = model
+        self.flow_model = flow_model
         self.conditioning = None
 
     def set_conditioning(self, z):
@@ -241,10 +243,17 @@ class FNOFluxODEWrapper(nn.Module):
 
     def forward(self, t, h):
         # Predict the evaporative flux
-        # print(h.dtype)
+        #print(h.dtype)
+        #print(h.shape)
         # TODO getting complex h values
-        flux = self.fno_model(h, self.conditioning)
-        return -flux  # Negative sign to represent evaporation
+        if self.flow_model is None:
+            flux = self.model(h, self.conditioning)
+            return -flux # Negative sign to represent evaporation
+        
+        # TODO actually we need to wrap the drop model to handle batching (with vmap)?
+        flow_model = torch.vmap(self.flow_model.calc_flow_dh_dt, in_dims=0)
+
+        return flow_model(h) + self.evap_model(h, self.conditioning)
 
 
 class FNOFluxODESolver(nn.Module):

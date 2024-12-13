@@ -195,8 +195,8 @@ class NODEDataset(Dataset):
     def __init__(
         self,
         data,
-        traj_len=10,
         conditioning_keys=None,
+        traj_len=10,
         profile_key="profile",
         run_keys=None,
         profile_scale=1.0,
