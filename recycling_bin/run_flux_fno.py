@@ -3,11 +3,11 @@ import torch.nn as nn
 import torch.optim as optim
 from tqdm import tqdm
 
-import networks_old
+import networks
 import visualize
 import logger
 import load_data
-import utils_old
+import utils
 
 
 def validate_node_model(model, time_steps, val_loader, loss_fn):
@@ -64,10 +64,10 @@ def train_node(
 def load_fno_model_from_logger(log_loader):
     config = log_loader.load_config()
     model_config = config["model_config"]
-    activation_fn = networks_old.get_activation(model_config["activation_fn"])
+    activation_fn = networks.get_activation(model_config["activation_fn"])
 
     # Setup the FNO Flux model from the config parameters
-    fno_model = networks_old.FNO_Flux(
+    fno_model = networks.FNO_Flux(
         input_dim=model_config.get("input_dim"),
         output_dim=model_config.get("output_dim"),
         num_fno_layers=model_config.get("num_fno_layers"),
@@ -77,8 +77,8 @@ def load_fno_model_from_logger(log_loader):
         num_fc_layers=model_config.get("num_fc_layers"),
         fc_width=model_config.get("fc_width"),
     )
-    ode_func = networks_old.FNOFluxODEWrapper(fno_model)
-    model = networks_old.FNOFluxODESolver(ode_func, solver_type=model_config["solver"])
+    ode_func = networks.FNOFluxODEWrapper(fno_model)
+    model = networks.FNOFluxODESolver(ode_func, solver_type=model_config["solver"])
 
     # Load the best validation model
     best_model_path = log_loader.get_relpath("best_model.pth")
@@ -108,9 +108,9 @@ def run_training(config, run_dir):
     config["model_config"]["input_dim"] = input_dim
     config["model_config"]["output_dim"] = output_dim
     model_config = config["model_config"]
-    activation_fn = networks_old.get_activation(model_config["activation_fn"])
+    activation_fn = networks.get_activation(model_config["activation_fn"])
 
-    fno_model = networks_old.FNO_Flux(
+    fno_model = networks.FNO_Flux(
         input_dim,
         output_dim,
         num_fno_layers=model_config["num_fno_layers"],
@@ -120,8 +120,8 @@ def run_training(config, run_dir):
         num_fc_layers=model_config["num_fc_layers"],
         fc_width=model_config["fc_width"],
     )
-    ode_func = networks_old.FNOFluxODEWrapper(fno_model)
-    model = networks_old.FNOFluxODESolver(ode_func, solver_type=model_config["solver"])
+    ode_func = networks.FNOFluxODEWrapper(fno_model)
+    model = networks.FNOFluxODESolver(ode_func, solver_type=model_config["solver"])
 
     exp_logger.log_config(config)
 

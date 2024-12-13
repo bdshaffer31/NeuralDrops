@@ -3,11 +3,11 @@ import torch.nn as nn
 import torch.optim as optim
 from tqdm import tqdm
 
-import networks_old
+import networks
 import visualize
 import logger
 import load_data
-import utils_old
+import utils
 
 
 def validate_fno_model(model, val_loader, loss_fn):
@@ -62,11 +62,11 @@ def train_fno(
 def load_fno_model_from_logger(log_loader):
     config = log_loader.load_config()
     model_config = config["model_config"]
-    activation_fn = networks_old.get_activation(model_config["activation_fn"])
+    activation_fn = networks.get_activation(model_config["activation_fn"])
 
     # Load the best model from the logger
     best_model_path = log_loader.get_relpath("best_model.pth")
-    model = networks_old.FNO(
+    model = networks.FNO(
         model_config["input_dim"],
         model_config["output_dim"],
         num_fno_layers=model_config["num_fno_layers"],
@@ -102,9 +102,9 @@ def run_training(config, run_dir):
     config["model_config"]["input_dim"] = conditioning_dim + 2
     config["model_config"]["output_dim"] = output_dim
     model_config = config["model_config"]
-    activation_fn = networks_old.get_activation(model_config["activation_fn"])
+    activation_fn = networks.get_activation(model_config["activation_fn"])
 
-    model = networks_old.FNO(
+    model = networks.FNO(
         input_dim,
         output_dim,
         num_fno_layers=model_config["num_fno_layers"],

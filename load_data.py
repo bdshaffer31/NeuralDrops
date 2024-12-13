@@ -3,7 +3,7 @@ import os
 import torch
 from scipy.io import loadmat
 import numpy as np
-import utils_old  # Assuming your utility functions are in utils.py
+import utils  # Assuming your utility functions are in utils.py
 from torch.utils.data import random_split, DataLoader
 import torch
 from torch.utils.data import Dataset
@@ -63,13 +63,13 @@ def preprocess_profile(
     """Preprocess the profile data."""
     profile = np.array(profile, dtype="float32")
     profile = torch.tensor(profile, dtype=torch.float32)
-    profile, _ = utils_old.detrend_dataset(profile, last_n=50, window_size=50)
-    profile = utils_old.smooth_profile(profile)
-    profile = utils_old.pad_profile(profile, temporal_pad * temporal_subsample)
-    profile = utils_old.vertical_crop_profile(profile, 0.78)
-    profile = utils_old.center_data(profile)
+    profile, _ = utils.detrend_dataset(profile, last_n=50, window_size=50)
+    profile = utils.smooth_profile(profile)
+    profile = utils.pad_profile(profile, temporal_pad * temporal_subsample)
+    profile = utils.vertical_crop_profile(profile, 0.78)
+    profile = utils.center_data(profile)
     if axis_symmetric:
-        profile = utils_old.central_split_data(profile)
+        profile = utils.central_split_data(profile)
     profile = profile[::temporal_subsample, spatial_subsample // 2 :: spatial_subsample]
     return profile
 
@@ -356,7 +356,7 @@ if __name__ == "__main__":
 
     preprocess_and_save(
         data_dir=data_dir,
-        run_nums=utils_old.good_run_numbers(),
+        run_nums=utils.good_run_numbers(),
         output_file=output_file,
         temporal_pad=128,
         temporal_subsample=12,

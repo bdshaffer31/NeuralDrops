@@ -4,7 +4,7 @@ import torch
 from torch.utils.data import Dataset
 import numpy as np
 
-import utils_old
+import utils
 
 # class ExperimentDataLoader:
 #     def __init__(self, data_dir, experiment_numbers=None):
@@ -298,16 +298,16 @@ class ProfileDataset(Dataset):
         np_profile = np.array(np_profile, dtype="float32")
         profile = torch.tensor(np_profile, dtype=torch.float32)
         # apply detrending, centering, padding here
-        profile, _ = utils_old.detrend_dataset(profile, last_n=50, window_size=50)
-        profile = utils_old.smooth_profile(profile)
-        profile = utils_old.pad_profile(
+        profile, _ = utils.detrend_dataset(profile, last_n=50, window_size=50)
+        profile = utils.smooth_profile(profile)
+        profile = utils.pad_profile(
             profile, self.temporal_pad * self.temporal_subsample
         )
-        profile = utils_old.vertical_crop_profile(profile, 0.78)
-        profile = utils_old.center_data(profile)
+        profile = utils.vertical_crop_profile(profile, 0.78)
+        profile = utils.center_data(profile)
         # if we want the axis symmetric data (half of the profile only)
         if self.axis_symmetric:
-            profile = utils_old.central_split_data(profile)
+            profile = utils.central_split_data(profile)
 
         profile = profile[:: self.temporal_subsample, :: self.spatial_subsample]
         return profile

@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.optim as optim
 from tqdm import tqdm
 
-import networks_old
+import networks
 import logger
 import load_data
 
@@ -89,8 +89,8 @@ def load_model_from_log_loader(log_loader):
 
 
 def init_node_model(model_config):
-    activation_fn = networks_old.get_activation(model_config["activation_fn"])
-    model = networks_old.FNO(
+    activation_fn = networks.get_activation(model_config["activation_fn"])
+    model = networks.FNO(
         model_config["input_dim"],
         model_config["output_dim"],
         num_fno_layers=model_config["num_fno_layers"],
@@ -104,8 +104,8 @@ def init_node_model(model_config):
 
 
 def init_fno_model(model_config):
-    activation_fn = networks_old.get_activation(model_config["activation_fn"])
-    model = networks_old.FNO(
+    activation_fn = networks.get_activation(model_config["activation_fn"])
+    model = networks.FNO(
         model_config["input_dim"],
         model_config["output_dim"],
         num_fno_layers=model_config["num_fno_layers"],
@@ -119,8 +119,8 @@ def init_fno_model(model_config):
 
 
 def init_fno_node(model_config):
-    activation_fn = networks_old.get_activation(model_config["activation_fn"])
-    fno_model = networks_old.FNO_Flux(
+    activation_fn = networks.get_activation(model_config["activation_fn"])
+    fno_model = networks.FNO_Flux(
         model_config["input_dim"],
         model_config["output_dim"],
         num_fno_layers=model_config["num_fno_layers"],
@@ -130,8 +130,8 @@ def init_fno_node(model_config):
         num_fc_layers=model_config["num_fc_layers"],
         fc_width=model_config["fc_width"],
     )
-    ode_func = networks_old.FNOFluxODEWrapper(fno_model)
-    model = networks_old.FNOFluxODESolver(ode_func, solver_type=model_config["solver"])
+    ode_func = networks.FNOFluxODEWrapper(fno_model)
+    model = networks.FNOFluxODESolver(ode_func, solver_type=model_config["solver"])
     return model
 
 
