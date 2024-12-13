@@ -136,7 +136,7 @@ def init_fno_node(model_config):
 
 
 def init_flux_fno(model_config):
-    # TODO: initialize a physics model, with the flux fno as the evap model
+    
     activation_fn = networks.get_activation(model_config["activation_fn"])
     fno_model = networks.FNO_Flux(
         model_config["input_dim"],
@@ -153,22 +153,35 @@ def init_flux_fno(model_config):
     def smoothing_fn(x):
         return utils.gaussian_blur_1d(x, sigma=10)
     
+
+    #TODO Possibly grad grid params from data
     params = utils.SimulationParams(
-        r_grid = 1280 * model_config["pixel_resolution"],  # Radius of the droplet in meters
-        hmax0=3e-4 * model_config["profile_scaler"],  # Initial droplet height at the center in meters
-        Nr=int(1280/model_config["spatial_sampling"]),  # Number of radial points
-        Nz=110,  # Number of z-axis points
-        dr= 2 * 1280 * model_config["pixel_resolution"] / (int(1280/model_config["spatial_sampling"]) - 1),  # Radial grid spacing
-        dz=3e-4 / (110 - 1),  # Vertical grid spacing
-        rho=1,  # Density of the liquid (kg/m^3) eg 1
-        sigma=0.072,  # Surface tension (N/m) eg 0.072
-        eta=1e-3,  # Viscosity (Pa*s) eg 1e-5
-    )
+        r_grid = 1280 * model_config["pixel_resolution"],
+        hmax0=1024 * model_config["pixel_resolution"] * model_config["profile_scale"],
+        Nr=int(1280 / model_config["spatial_sampling"]),
+        Nz=110,
+        dr= 2 * 1280 * model_config["pixel_resolution"] / (int(1280 / model_config["spatial_sampling"]) - 1),
+        dz=1024 * model_config["pixel_resolution"] * model_config["profile_scale"] / (110 - 1),
+        rho=1,
+        sigma=0.072,
+        eta=1e-3,
+
+        #TODO 
+        A = 8.07131,
+        B = 1730.63,
+        C = 233.4,
+        D = 2.42e-5,
+        Mw = 0.018,
+        #Rs = 8.314,
+        Rs = 461.5,
+        T = 293.15,
+        RH = 0.20,
+        )
 
     flow_model = pure_drop_model.PureDropModel(params, smoothing_fn=smoothing_fn)
 
-    ode_func = networks.FNOFluxODEWrapper(fno_model, flow_model, profile_scaler=model_config["profile_scaler"])
-    model = networks.FNOFluxODESolver(ode_func, solver_type=model_config["solver"], time_step=model_config["time_inc"] )
+    ode_func = networks.FNOFluxODEWrapper(fno_model, flow_model, profile_scaler=model_config["profile_scale"])
+    model = networks.FNOFluxODESolver(ode_func, model_config["time_inc"], solver_type=model_config["solver"] )
     return model
 
 

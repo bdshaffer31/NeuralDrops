@@ -260,11 +260,12 @@ class FNOFluxODEWrapper(nn.Module):
 
 
 class FNOFluxODESolver(nn.Module):
-    def __init__(self, ode_func, time_step=1, solver_type="rk4"):
+    def __init__(self, ode_func, time_step = 1, solver_type="rk4"):
         super(FNOFluxODESolver, self).__init__()
         self.ode_func = ode_func
         self.solver_type = solver_type
         self.solver = self.init_solver()
+        #Shift spot where time_step is
         self.time_step = time_step
 
     def init_solver(self):
@@ -396,3 +397,4 @@ def get_activation(activation_name):
     if activation is None:
         raise ValueError(f"Activation function '{activation_name}' is not supported.")
     return activation
+

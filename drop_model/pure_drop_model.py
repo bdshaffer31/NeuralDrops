@@ -1,4 +1,6 @@
 import torch
+import os
+os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"
 
 class PureDropModel:
     def __init__(self, params, evap_model=None, smoothing_fn=None, z_fno=None):
@@ -65,8 +67,8 @@ class PureDropModel:
 
         u_grid = self.interp_h_mask_grid(u_grid, h, self.z)
 
-        u_grid[u_grid > 5] = 5
-        u_grid[u_grid < -5] = -5
+        u_grid[u_grid > 10] = 10
+        u_grid[u_grid < -10] = -10
         return u_grid
 
     # w velocity calculation
@@ -85,7 +87,7 @@ class PureDropModel:
         w_grid[w_grid < -10] = -10
         return w_grid
 
-    def interp_h_mask_grid(self, grid_data, h, z):
+    def interp_h_mask_grid_new(self, grid_data, h, z):
         dz = z[1] - z[0]
         masked_grid = grid_data.clone()
 
@@ -123,7 +125,7 @@ class PureDropModel:
                 masked_grid[i, :] = 0
         return masked_grid
     
-    def interp_h_mask_grid_old(self, grid_data, h, z):
+    def interp_h_mask_grid(self, grid_data, h, z):
         dz = z[1] - z[0]
         masked_grid = grid_data.clone()
 
@@ -167,8 +169,6 @@ class PureDropModel:
     def calc_evap_dh_dt(self, h, z_FNO):
         if self.evap_model is None:
             return torch.zeros_like(h)
-        if self.evap_model is "fno_model":
-            return self.evap_model(h, z_FNO)
         return self.evap_model(self.params, self.r, h)
 
     # Total dh/dt calculation
@@ -219,11 +219,11 @@ def main():
     # )
     params = utils.SimulationParams(
         r_grid=1.0e-3,  # Radius of the droplet in meters
-        hmax0=3e-4,  # Initial droplet height at the center in meters
+        hmax0=5e-4,  # Initial droplet height at the center in meters
         Nr=640,  # Number of radial points
         Nz=110,  # Number of z-axis points
-        dr= 2 * 1.0e-3 / (640 - 1),  # Radial grid spacing
-        dz=3e-4 / (110 - 1),  # Vertical grid spacing
+        dr= 2 * 1.0e-3 / (256 - 1),  # Radial grid spacing
+        dz=5e-4 / (110 - 1),  # Vertical grid spacing
         rho=1,  # Density of the liquid (kg/m^3) eg 1
         sigma=0.072,  # Surface tension (N/m) eg 0.072
         eta=1e-3,  # Viscosity (Pa*s) eg 1e-5
@@ -238,7 +238,7 @@ def main():
         T = 293.15, # Ambient Temperature (K)
         RH = 0.20, # Relative Humidity (-)
     )
-    Nt = 1000
+    Nt = 3000
 
     dt = 1e-3
     t_lin = torch.linspace(0, dt * Nt, Nt)
@@ -246,9 +246,9 @@ def main():
     def smoothing_fn(x):
         return utils.gaussian_blur_1d(x, sigma=10)
 
-    drop_model = PureDropModel(params, evap_model=evap_models.constant_evap_model, smoothing_fn=smoothing_fn)
+    drop_model = PureDropModel(params, evap_model=evap_models.evap_model, smoothing_fn=smoothing_fn)
 
-    r_c = 0.9*params.r_grid
+    r_c = 0.5*params.r_grid
 
     #h_0 = utils.setup_polynomial_initial_h_profile(
     #    drop_model.r, 0.8 * params.hmax0, r_c, order=4

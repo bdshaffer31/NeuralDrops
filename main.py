@@ -13,6 +13,10 @@ def flux_fno_model_config():
         "fc_width": 256,
         "activation_fn": "relu",
         "solver": "euler",
+        "profile_scale": 100,  # approx 1 / spacial unit order of magnitude
+        "pixel_resolution": 0.000003, # m / pixel
+        "spatial_sampling": 6, # m / pixel
+        "time_inc": 0.05/12, # time increment and temporal sampling
     }
     return model_config
 
@@ -82,9 +86,6 @@ def main(train=False):
         "run_keys": [1],  # if None use all
         "conditioning_keys": ["alpha", "beta", "gamma"],
         "profile_scale": 100,  # approx 1 / spacial unit order of magnitude
-        "pixel_resolution": 0.000003, # m / pixel
-        "spatial_sampling": 6, # m / pixel
-        "time_inc": 0.05/12, # time increment and temporal sampling
     }
 
     config["model_config"] = get_model_config(config["model_type"])
@@ -99,4 +100,4 @@ def main(train=False):
 
 if __name__ == "__main__":
     main(train=True)
-
+    
