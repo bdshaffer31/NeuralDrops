@@ -3,11 +3,11 @@ import torch.nn as nn
 import torch.optim as optim
 from tqdm import tqdm
 
-import networks
+import networks_old
 import visualize
 import logger
 import load_data
-import utils
+import utils_old
 
 import pure_drop_model
 
@@ -53,7 +53,7 @@ def train_node(
             
             def post_fn(h):
                 h = torch.clamp(h, min=0)
-                h = utils.drop_polynomial_fit(h, 8)
+                h = utils_old.drop_polynomial_fit(h, 8)
                 return h
 
             pred_y_traj = utils_drop.run_forward_euler_simulation(drop_model, x_0, t[1], post_fn)
@@ -80,10 +80,10 @@ def train_node(
 
 def load_fno_model_from_logger(log_loader):
     config = log_loader.load_config()
-    activation_fn = networks.get_activation(config["activation_fn"])
+    activation_fn = networks_old.get_activation(config["activation_fn"])
 
     # Setup the FNO Flux model from the config parameters
-    fno_model = networks.FNO_Flux(
+    fno_model = networks_old.FNO_Flux(
         input_dim=config.get("input_dim"),
         output_dim=config.get("output_dim"),
         num_fno_layers=config.get("num_fno_layers"),
@@ -93,10 +93,10 @@ def load_fno_model_from_logger(log_loader):
         num_fc_layers=config.get("num_fc_layers"),
         fc_width=config.get("fc_width"),
     )
-    ode_func = networks.FNOFluxODEWrapper(fno_model)
+    ode_func = networks_old.FNOFluxODEWrapper(fno_model)
     # model = networks.NeuralODE(ode_func, config.get("solver"))
     # model = networks.ForwardEuler(ode_func)
-    model = networks.FNOFluxODESolver(ode_func, solver_type=config["solver"])
+    model = networks_old.FNOFluxODESolver(ode_func, solver_type=config["solver"])
 
     # Load the best validation model
     best_model_path = log_loader.get_relpath("best_model.pth")
@@ -125,9 +125,9 @@ def run_training(config, run_dir):
     config["conditioning_dim"] = conditioning_dim
     config["input_dim"] = input_dim
     config["output_dim"] = output_dim
-    activation_fn = networks.get_activation(config["activation_fn"])
+    activation_fn = networks_old.get_activation(config["activation_fn"])
 
-    fno_model = networks.FNO_Flux(
+    fno_model = networks_old.FNO_Flux(
         input_dim,
         output_dim,
         num_fno_layers=config["num_fno_layers"],
@@ -137,10 +137,10 @@ def run_training(config, run_dir):
         num_fc_layers=config["num_fc_layers"],
         fc_width=config["fc_width"],
     )
-    ode_func = networks.FNOFluxODEWrapper(fno_model)
+    ode_func = networks_old.FNOFluxODEWrapper(fno_model)
     # model = networks.NeuralODE(ode_func, solver=config["solver"])
     # model = networks.ForwardEuler(ode_func)
-    model = networks.FNOFluxODESolver(ode_func, solver_type=config["solver"])
+    model = networks_old.FNOFluxODESolver(ode_func, solver_type=config["solver"])
 
     exp_logger.log_config(config)
 
@@ -178,7 +178,7 @@ def main(train=False):
         # data params
         "data_dir": "data",
         "batch_size": 32,
-        "exp_nums": utils.good_run_numbers()[
+        "exp_nums": utils_old.good_run_numbers()[
             :1
         ],  # if None use all, otherwise give a list of ints
         "valid_solutes": None,  # if None keep all solutes, otherwise give a list of strings

@@ -6,7 +6,7 @@ import logger
 import matplotlib.pyplot as plt
 
 
-import utils
+import utils_old
 
 
 def load_contents(data_dir, file):
@@ -51,12 +51,12 @@ def load_profile_from_contents(
     np_profile = np.array(np_profile, dtype="float32")
     profile = torch.tensor(np_profile, dtype=torch.float32)
     # apply detrending, centering, padding here
-    profile, _ = utils.detrend_dataset(profile, last_n=50, window_size=50)
-    profile = utils.smooth_profile(profile)
-    profile = utils.pad_profile(profile, end_pad * temporal_subsample)
-    profile = utils.vertical_crop_profile(profile, 0.78)
-    profile = utils.center_data(profile)
-    profile = utils.central_split_data(profile)
+    profile, _ = utils_old.detrend_dataset(profile, last_n=50, window_size=50)
+    profile = utils_old.smooth_profile(profile)
+    profile = utils_old.pad_profile(profile, end_pad * temporal_subsample)
+    profile = utils_old.vertical_crop_profile(profile, 0.78)
+    profile = utils_old.center_data(profile)
+    profile = utils_old.central_split_data(profile)
 
     profile = profile[::temporal_subsample, ::spatial_subsample]
     return profile

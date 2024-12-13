@@ -137,7 +137,7 @@ class PureDropModel:
 
 
 def main():
-    import utils as utils
+    import utils_old as utils_old
     import drop_viz as drop_viz
     import evap_models
 
@@ -176,7 +176,7 @@ def main():
     #     sigma=0.072,  # Surface tension (N/m) eg 0.072
     #     eta=1e-3,  # Viscosity (Pa*s) eg 1e-3
     # )
-    params = utils.SimulationParams(
+    params = utils_old.SimulationParams(
         r_grid=1.0e-3,  # Radius of the droplet in meters
         hmax0=3e-4,  # Initial droplet height at the center in meters
         Nr=640,  # Number of radial points
@@ -202,7 +202,7 @@ def main():
     t_lin = torch.linspace(0, dt * Nt, Nt)
 
     def smoothing_fn(x):
-        return utils.gaussian_blur_1d(x, sigma=10)
+        return utils_old.gaussian_blur_1d(x, sigma=10)
 
     drop_model = PureDropModel(params, evap_model=evap_models.deegan_evap_model, smoothing_fn=smoothing_fn)
 
@@ -212,19 +212,19 @@ def main():
     #    drop_model.r, 0.8 * params.hmax0, r_c, order=4
     #)
 
-    h_0 = utils.setup_cap_initial_h_profile(drop_model.r, 0.8 * params.hmax0, r_c
+    h_0 = utils_old.setup_cap_initial_h_profile(drop_model.r, 0.8 * params.hmax0, r_c
     )
 
     drop_viz.flow_viz(drop_model, h_0, 0, 0)
 
     def post_fn(h):
         h = torch.clamp(h, min=0)  # ensure non-negative height
-        h = utils.drop_polynomial_fit(h, 8)  # project height on polynomial basis
+        h = utils_old.drop_polynomial_fit(h, 8)  # project height on polynomial basis
         return h
     
     #print(h_0)
 
-    h_history = utils.run_forward_euler_simulation(drop_model, h_0, t_lin, post_fn)
+    h_history = utils_old.run_forward_euler_simulation(drop_model, h_0, t_lin, post_fn)
     drop_viz.plot_height_profile_evolution(drop_model.r, h_history, params)
 
     # plot the velocity profile and

@@ -3,11 +3,11 @@ import torch.nn as nn
 import torch.optim as optim
 from tqdm import tqdm
 
-import networks
+import networks_old
 import visualize
 import logger
 import load_data
-import utils
+import utils_old
 
 
 def validate_node_model(model, time_steps, val_loader, loss_fn):
@@ -64,11 +64,11 @@ def train_node(
 def load_node_model_from_logger(log_loader):
     config = log_loader.load_config()
 
-    activation_fn = networks.get_activation(config["activation_fn"])
-    output_fn = networks.get_activation(config["output_fn"])
+    activation_fn = networks_old.get_activation(config["activation_fn"])
+    output_fn = networks_old.get_activation(config["output_fn"])
 
     # setup the model from the config parameters
-    ode_func = networks.ODE_FCNN(
+    ode_func = networks_old.ODE_FCNN(
         input_dim=config.get("input_dim"),
         output_dim=config.get("output_dim"),
         conditioning_dim=config.get("conditioning_dim"),
@@ -77,7 +77,7 @@ def load_node_model_from_logger(log_loader):
         activation_fn=activation_fn,
         output_fn=output_fn,
     )
-    model = networks.NeuralODE(ode_func, solver=config["solver"])
+    model = networks_old.NeuralODE(ode_func, solver=config["solver"])
 
     # Load the best validation model
     best_model_path = log_loader.get_relpath("best_model.pth")
@@ -101,13 +101,13 @@ def run_training(config, run_dir):
     input_dim = initial_condition.shape[1]
     output_dim = target_snapshots.shape[2]
     conditioning_dim = conditioning.shape[1]
-    activation_fn = networks.get_activation(config["activation_fn"])
-    output_fn = networks.get_activation(config["output_fn"])
+    activation_fn = networks_old.get_activation(config["activation_fn"])
+    output_fn = networks_old.get_activation(config["output_fn"])
     config["input_dim"] = input_dim
     config["output_dim"] = output_dim
     config["conditioning_dim"] = conditioning.shape[1]
 
-    ode_func = networks.ODE_FCNN(
+    ode_func = networks_old.ODE_FCNN(
         input_dim=input_dim,
         conditioning_dim=conditioning_dim,
         output_dim=output_dim,
@@ -116,7 +116,7 @@ def run_training(config, run_dir):
         activation_fn=activation_fn,
         output_fn=output_fn,
     )
-    model = networks.NeuralODE(ode_func, solver=config["solver"])
+    model = networks_old.NeuralODE(ode_func, solver=config["solver"])
 
     exp_logger.log_config(config)
 

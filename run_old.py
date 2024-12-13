@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.optim as optim
 from tqdm import tqdm
 
-import networks
+import networks_old
 import logger
 import load_data
 
@@ -89,8 +89,8 @@ def load_model_from_log_loader(log_loader):
 
 
 def init_node_model(model_config):
-    activation_fn = networks.get_activation(model_config["activation_fn"])
-    model = networks.FNO(
+    activation_fn = networks_old.get_activation(model_config["activation_fn"])
+    model = networks_old.FNO(
         model_config["input_dim"],
         model_config["output_dim"],
         num_fno_layers=model_config["num_fno_layers"],
@@ -104,8 +104,8 @@ def init_node_model(model_config):
 
 
 def init_fno_model(model_config):
-    activation_fn = networks.get_activation(model_config["activation_fn"])
-    model = networks.FNO(
+    activation_fn = networks_old.get_activation(model_config["activation_fn"])
+    model = networks_old.FNO(
         model_config["input_dim"],
         model_config["output_dim"],
         num_fno_layers=model_config["num_fno_layers"],
@@ -119,8 +119,8 @@ def init_fno_model(model_config):
 
 
 def init_fno_node(model_config):
-    activation_fn = networks.get_activation(model_config["activation_fn"])
-    fno_model = networks.FNO_Flux(
+    activation_fn = networks_old.get_activation(model_config["activation_fn"])
+    fno_model = networks_old.FNO_Flux(
         model_config["input_dim"],
         model_config["output_dim"],
         num_fno_layers=model_config["num_fno_layers"],
@@ -130,15 +130,15 @@ def init_fno_node(model_config):
         num_fc_layers=model_config["num_fc_layers"],
         fc_width=model_config["fc_width"],
     )
-    ode_func = networks.FNOFluxODEWrapper(fno_model)
-    model = networks.FNOFluxODESolver(ode_func, solver_type=model_config["solver"])
+    ode_func = networks_old.FNOFluxODEWrapper(fno_model)
+    model = networks_old.FNOFluxODESolver(ode_func, solver_type=model_config["solver"])
     return model
 
 
 def init_flux_fno(model_config):
     # TODO: initialize a physics model, with the flux fno as the evap model
-    activation_fn = networks.get_activation(model_config["activation_fn"])
-    fno_model = networks.FNO_Flux(
+    activation_fn = networks_old.get_activation(model_config["activation_fn"])
+    fno_model = networks_old.FNO_Flux(
         model_config["input_dim"],
         model_config["output_dim"],
         num_fno_layers=model_config["num_fno_layers"],
@@ -153,10 +153,10 @@ def init_flux_fno(model_config):
     # get needed params, might have to load data from config here unfortunately
     drop_model = drop_model(...) #, evap_model=fno_model)
     # TODO actually we need to wrap the drop model to handle batching (with vmap)?
-    drop_model = networks.NeuralDropModel(..., evap_model=fno_model)
+    drop_model = networks_old.NeuralDropModel(..., evap_model=fno_model)
 
-    ode_func = networks.FNOFluxODEWrapper(drop_model)
-    model = networks.FNOFluxODESolver(ode_func, solver_type=model_config["solver"])
+    ode_func = networks_old.FNOFluxODEWrapper(drop_model)
+    model = networks_old.FNOFluxODESolver(ode_func, solver_type=model_config["solver"])
     return model
 
 
