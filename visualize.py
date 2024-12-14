@@ -9,7 +9,7 @@ import run
 
 def fno_traj_pred_from_dataset(model, dataset, run_name, t_0_idx=1):
     with torch.no_grad():
-        time_steps = dataset.data[run_name]["t"][t_0_idx:]
+        time_steps = dataset.data[run_name]["t_lin"][t_0_idx:]
         initial_state = (
             dataset.data[run_name]["profile"][t_0_idx]
             .unsqueeze(0)
@@ -26,7 +26,7 @@ def node_traj_pred_from_dataset(model, dataset, run_name, t_0_idx=1):
     with torch.no_grad():
         conditioning = dataset.get_conditioning(dataset.data[run_name])
         initial_state = dataset.data[run_name]["profile"][t_0_idx].unsqueeze(0)
-        time_steps = dataset.data[run_name]["t"][t_0_idx:]
+        time_steps = dataset.data[run_name]["t_lin"][t_0_idx:]
         print(initial_state.shape, conditioning.shape, time_steps.shape)
         pred_traj = model(initial_state, conditioning, time_steps).squeeze()
         return pred_traj
@@ -36,7 +36,8 @@ def fno_node_traj_pred_from_dataset(model, dataset, run_name, t_0_idx=1):
     with torch.no_grad():
         conditioning = dataset.get_conditioning(dataset.data[run_name]).unsqueeze(0)
         initial_state = dataset.data[run_name]["profile"][t_0_idx].unsqueeze(0)
-        time_steps = dataset.data[run_name]["t"][t_0_idx:]
+        initial_state = initial_state * dataset.profile_scale
+        time_steps = dataset.data[run_name]["t_lin"][t_0_idx:]
         pred_traj = model(initial_state, conditioning, time_steps).squeeze()
         return pred_traj
 
@@ -50,7 +51,7 @@ def trajectory_pred(model_type, model, dataset, run_name, t_0_idx=1):
         pred_traj = fno_traj_pred_from_dataset(
             model, dataset, run_name, t_0_idx=t_0_idx
         )
-    elif model_type == "fno_node":
+    elif model_type in ["fno_node", "flux_fno"]:
         pred_traj = fno_node_traj_pred_from_dataset(
             model, dataset, run_name, t_0_idx=t_0_idx
         )

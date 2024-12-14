@@ -232,12 +232,12 @@ class FNO_Flux(FNO):
 
 
 class FNOFluxODEWrapper(nn.Module):
-    def __init__(self, model, flow_model=None, profile_scale=1, time_inc = 1):
+    def __init__(self, model, flow_model=None, profile_scale=1, time_scale=1):
         super(FNOFluxODEWrapper, self).__init__()
         self.evap_model = model
         self.flow_model = flow_model
         self.profile_scale = profile_scale
-        self.time_inc = time_inc
+        self.time_scale = time_scale
         self.conditioning = None
 
     def set_conditioning(self, z):
@@ -251,13 +251,33 @@ class FNOFluxODEWrapper(nn.Module):
             return -flux # Negative sign to represent evaporation
         
         def flow_model_scaled(h_in):
-            h_in *= self.profile_scale
-            flow_dh_dt = self.flow_model.calc_flow_dh_dt(h_in)
-            return flow_dh_dt / self.profile_scale/ self.time_inc
-        
-        flow_model = torch.vmap(flow_model_scaled, in_dims=0)
+            h_scaled = h_in / self.profile_scale
+            # print("h_scaled", h_scaled.shape, torch.min(h_scaled), torch.max(h_scaled))
 
-        return flow_model(h) - self.evap_model(h.to(torch.float32), self.conditioning)
+            flow_dh_dt = self.flow_model.calc_flow_dh_dt(h_scaled)
+            return flow_dh_dt * self.profile_scale
+        
+        # print("profile_scale", self.profile_scale)
+        # print("h", h.shape, torch.min(h), torch.max(h))
+        flow_model = torch.vmap(flow_model_scaled, in_dims=0)
+        flow_term = flow_model(h)
+        # print("h", h.shape, torch.min(h), torch.max(h))
+        # print("f", flow_term.shape, torch.min(flow_term), torch.max(flow_term))
+        evap_term = self.evap_model(h.to(torch.float32), self.conditioning)
+        # print("e", evap_term.shape, torch.min(evap_term), torch.max(evap_term))
+
+        # with torch.no_grad():
+        #     import matplotlib.pyplot as plt
+        #     plt.plot(h[0], label="h")
+        #     plt.plot(flow_term[0], label="f")
+        #     plt.plot(evap_term[0], label="e")
+        #     plt.legend()
+        #     plt.show()
+
+        # random eyeballed scaling to get flux on scale or flow
+        dh_dt = flow_term - 1e0*evap_term
+
+        return dh_dt
 
 
 class FNOFluxODESolver(nn.Module):

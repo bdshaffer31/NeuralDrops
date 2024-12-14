@@ -16,7 +16,7 @@
         "beta",
         "gamma"
     ],
-    "profile_scale": 100,
+    "profile_scale": 1000000.0,
     "model_config": {
         "modes": 16,
         "num_fno_layers": 4,
@@ -25,10 +25,6 @@
         "fc_width": 256,
         "activation_fn": "relu",
         "solver": "euler",
-        "profile_scale": 100,
-        "pixel_resolution": 3e-06,
-        "spatial_sampling": 6,
-        "time_inc": 0.004166666666666667,
         "conditioning_dim": 3,
         "input_dim": 4,
         "output_dim": 1
