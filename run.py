@@ -46,6 +46,10 @@ def train(
 
         if model_type in ["node", "fno_node", "flux_fno"]:
             for t, x_0, z, y_traj in train_loader:
+                # print("t", t.shape, torch.min(t), torch.max(t))
+                # print("x_0", x_0.shape, torch.min(x_0), torch.max(x_0))
+                # print("z", z.shape, torch.min(z), torch.max(z))
+                # print("y_traj", y_traj.shape, torch.min(y_traj), torch.max(y_traj))
                 optimizer.zero_grad()
                 pred_y_traj = model(x_0, z, t[0]).transpose(0, 1)
                 loss = loss_fn(pred_y_traj, y_traj)
@@ -88,7 +92,8 @@ def load_model_from_log_loader(log_loader):
     return model
 
 
-def init_node_model(model_config):
+def init_node_model(config):
+    model_config = config["model_config"]
     activation_fn = networks.get_activation(model_config["activation_fn"])
     model = networks.FNO(
         model_config["input_dim"],
@@ -103,7 +108,8 @@ def init_node_model(model_config):
     return model
 
 
-def init_fno_model(model_config):
+def init_fno_model(config):
+    model_config = config["model_config"]
     activation_fn = networks.get_activation(model_config["activation_fn"])
     model = networks.FNO(
         model_config["input_dim"],
@@ -118,7 +124,8 @@ def init_fno_model(model_config):
     return model
 
 
-def init_fno_node(model_config):
+def init_fno_node(config):
+    model_config = config["model_config"]
     activation_fn = networks.get_activation(model_config["activation_fn"])
     fno_model = networks.FNO_Flux(
         model_config["input_dim"],
@@ -135,7 +142,8 @@ def init_fno_node(model_config):
     return model
 
 
-def init_flux_fno(model_config):
+def init_flux_fno(config):
+    model_config = config["model_config"]
     
     activation_fn = networks.get_activation(model_config["activation_fn"])
     fno_model = networks.FNO_Flux(
@@ -155,13 +163,45 @@ def init_flux_fno(model_config):
     
 
     #TODO Possibly grad grid params from data
+    # params = utils.SimulationParams(
+    #     r_grid = 1280 * model_config["pixel_resolution"],
+    #     hmax0=1024 * model_config["pixel_resolution"] * model_config["profile_scale"],
+    #     Nr=int(1280 / model_config["spatial_sampling"])+1,
+    #     Nz=110,
+    #     dr= 2 * 1280 * model_config["pixel_resolution"] / (int(1280 / model_config["spatial_sampling"]) - 1),
+    #     dz=1024 * model_config["pixel_resolution"] * model_config["profile_scale"] / (110 - 1),
+    #     rho=1,
+    #     sigma=0.072,
+    #     eta=1e-3,
+
+    #     #TODO 
+    #     A = 8.07131,
+    #     B = 1730.63,
+    #     C = 233.4,
+    #     D = 2.42e-5,
+    #     Mw = 0.018,
+    #     #Rs = 8.314,
+    #     Rs = 461.5,
+    #     T = 293.15,
+    #     RH = 0.20,
+    #     )
+
+    data = torch.load(config["data_file"])
+    first_key = list(data.keys())[0]
+    t_lin = data[first_key]["t_lin"]
+    r_lin = data[first_key]["r_lin"]
+    z_lin = data[first_key]["z_lin"]
+    dt = t_lin[1] - t_lin[0]
+    dr = r_lin[1] - r_lin[0]
+    dz = z_lin[1] - z_lin[0]
+
     params = utils.SimulationParams(
-        r_grid = 1280 * model_config["pixel_resolution"],
-        hmax0=1024 * model_config["pixel_resolution"] * model_config["profile_scale"],
-        Nr=int(1280 / model_config["spatial_sampling"])+1,
-        Nz=110,
-        dr= 2 * 1280 * model_config["pixel_resolution"] / (int(1280 / model_config["spatial_sampling"]) - 1),
-        dz=1024 * model_config["pixel_resolution"] * model_config["profile_scale"] / (110 - 1),
+        r_grid = torch.max(r_lin),
+        hmax0=torch.max(z_lin),
+        Nr=r_lin.shape[0],
+        Nz=z_lin.shape[0],
+        dr=dr,
+        dz=dz,
         rho=1,
         sigma=0.072,
         eta=1e-3,
@@ -180,20 +220,23 @@ def init_flux_fno(model_config):
 
     flow_model = pure_drop_model.PureDropModel(params, smoothing_fn=smoothing_fn)
 
-    ode_func = networks.FNOFluxODEWrapper(fno_model, flow_model, profile_scale=model_config["profile_scale"])
-    model = networks.FNOFluxODESolver(ode_func, model_config["time_inc"], solver_type=model_config["solver"] )
+    print("dt", dt)
+    # TODO random ass dt scaling to get shit moving
+    dt = dt * 1
+    ode_func = networks.FNOFluxODEWrapper(fno_model, flow_model, profile_scale=config["profile_scale"], time_scale=dt)
+    model = networks.FNOFluxODESolver(ode_func, time_step=dt, solver_type=model_config["solver"] )
     return model
 
 
 def init_model(config):
-    model_config = config["model_config"]
+    # model_config = config["model_config"]
     init_fns = {
         "fno": init_fno_model,
         "node": init_node_model,
         "fno_node": init_fno_node,
         "flux_fno": init_flux_fno,
     }
-    return init_fns[config["model_type"]](model_config)
+    return init_fns[config["model_type"]](config)
 
 
 def setup_in_out_dim(config, train_loader):

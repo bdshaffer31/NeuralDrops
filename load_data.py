@@ -281,7 +281,7 @@ class FNODataset(Dataset):
         for exp_key, exp_data in self.data.items():
             profile = exp_data[self.profile_key]  # Shape: [time, x]
             profile = profile * self.profile_scale
-            time_steps = exp_data["t"]  # Shape: [time]
+            time_steps = exp_data["t_lin"]  # Shape: [time]
             conditioning = self.get_conditioning(exp_data)
 
             # Create samples for each time step starting from the second time step

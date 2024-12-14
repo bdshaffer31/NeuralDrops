@@ -192,7 +192,7 @@ def main():
     import evap_models
 
     drop_viz.set_styling()
-    torch.set_default_dtype(torch.float32)
+    torch.set_default_dtype(torch.float64)
 
     # TODO consider doing something different with these
     params = utils.SimulationParams(
