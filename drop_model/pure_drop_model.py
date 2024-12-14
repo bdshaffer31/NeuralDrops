@@ -1,16 +1,16 @@
 import torch
 
-
 class PureDropModel:
-    def __init__(self, params, evap_model=None, smoothing_fn=None):
+    def __init__(self, params, evap_model=None, smoothing_fn=None, z_fno=None):
         # Initialize with a height profile and a params object
         self.params = params
         self.r, self.z = self.setup_grids()
         self.evap_model = evap_model
         self.smoothing_fn = smoothing_fn
+        self.z_fno = z_fno
 
     def setup_grids(self):
-        r = torch.linspace(-self.params.r_c, self.params.r_c, self.params.Nr)
+        r = torch.linspace(-self.params.r_grid, self.params.r_grid, self.params.Nr)
         z = torch.linspace(0, self.params.hmax0, self.params.Nz)
         return r, z
 
@@ -58,6 +58,9 @@ class PureDropModel:
         )
 
         u_grid = self.interp_h_mask_grid(u_grid, h, self.z)
+
+        # u_grid[u_grid > 10] = 10
+        # u_grid[u_grid < -10] = -10
         return u_grid
 
     # w velocity calculation
@@ -71,9 +74,67 @@ class PureDropModel:
             (integrand[:, :-1] + integrand[:, 1:]) * 0.5 * self.params.dz, dim=1
         )
         w_grid = self.interp_h_mask_grid(w_grid, h, self.z)
+
+        # w_grid[w_grid > 10] = 10
+        # w_grid[w_grid < -10] = -10
         return w_grid
 
+
+    #u_grid = self.interp_h_mask_grid(u_grid, h, self.z)
+    def interp_h_mask_grid_mdm(self, grid_data, h, z):
+        dz = z[1] - z[0]
+        masked_grid = grid_data.clone()
+
+        lower_indices = torch.searchsorted(z, h)
+        #valid_mask = (lower_indices >= 0) & (lower_indices < len(z) - 1)
+
+        def mask(masked_grid_in, h_r, lower_index_in, z_in):
+            z_below = torch.index_select(z_in, 0, lower_index_in)
+            
+            value_above = torch.index_select(masked_grid_in, 0, lower_index_in)
+            occupation_percent = (h_r - z_below) / dz
+            masked_grid_in[lower_index_in] = occupation_percent * value_above
+
+            #TODO !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            indices = torch.linspace(0, len(masked_grid_in) -1, len(masked_grid_in))
+            idx = torch.index_select(indices, 0, lower_index_in)
+            indices = torch.linspace(idx, z_in[-1] - 1, int(z_in[-1] - idx))
+
+            #masked_grid_in[idx + 1 :] = 0
+            #masked_grid_in[5 :] = 0
+            masked_grid_in.index_fill_(0, indices, 0.0)
+            #TODO !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            return masked_grid_in
+        h = torch.unsqueeze(h, 1)
+        lower_indices = torch.unsqueeze(lower_indices, 1)
+
+        masked_grid = torch.vmap(mask, in_dims = (0, 0, 0, None))(masked_grid, h, lower_indices, z)
+        return masked_grid
+
+
     def interp_h_mask_grid(self, grid_data, h, z):
+        dz = z[1] - z[0]
+        masked_grid = grid_data.clone()
+
+        lower_indices = torch.searchsorted(z, h) - 1
+        lower_indices = torch.clamp(lower_indices, 0, len(z) - 2)
+
+        batch_size = grid_data.shape[0]
+        batch_indices = torch.arange(batch_size)
+
+        z_below = z[lower_indices]
+        value_above = grid_data[batch_indices, lower_indices]
+        occupation_percent = (h - z_below) / dz
+        masked_grid[batch_indices, lower_indices] = occupation_percent * value_above
+        grid_size = grid_data.shape[1]
+        indices = torch.arange(grid_size).expand(batch_size, -1)
+        mask = indices <= lower_indices.unsqueeze(1)
+        masked_grid *= mask
+
+        return masked_grid
+    
+    #TODO Remove once new is fixed
+    def interp_h_mask_grid_old(self, grid_data, h, z):
         dz = z[1] - z[0]
         masked_grid = grid_data.clone()
 
@@ -117,79 +178,61 @@ class PureDropModel:
     def calc_evap_dh_dt(self, h):
         if self.evap_model is None:
             return torch.zeros_like(h)
-        return self.evap_model(h)
+        return self.evap_model(self.params, self.r, h)
 
     # Total dh/dt calculation
     def calc_dh_dt(self, h):
+        #return self.calc_flow_dh_dt(h) + self.calc_evap_dh_dt(self.r, h, z = None)
         return self.calc_flow_dh_dt(h) + self.calc_evap_dh_dt(h)
 
 
 def main():
-    import drop_model.utils as utils
-    import drop_model.drop_viz as drop_viz
+    import utils as utils
+    import drop_viz as drop_viz
+    import evap_models
 
     drop_viz.set_styling()
-    torch.set_default_dtype(torch.float64)
-
-    from load_data_old import ProfileDataset
-
-    dataset = ProfileDataset(
-        "data", [40], axis_symmetric=False, spatial_subsample=6, temporal_subsample=24
-    )
-    viz_file = dataset.valid_files[0]
-    h_0 = dataset.data[viz_file]["profile"][1]
-    h_0 = dataset.profile_scaler.inverse_apply(h_0)
-    print(torch.max(h_0), torch.min(h_0))
-    h_0 -= torch.min(h_0)
-    h_0 /= torch.max(h_0)
-    h_0 -= 0.6
-    h_0 = torch.clamp(h_0, min=0.0)
-    h_0 = h_0.to(torch.float64)
-    h_0 = utils.drop_polynomial_fit(h_0, 8)
-
-    h_0 *= 0.000003 * 100
-    r_c = 0.000003 * 640
-    maxh0 = torch.max(h_0).item() * 1.2
-    print(h_0.shape, maxh0, print(r_c))
+    torch.set_default_dtype(torch.float32)
 
     # TODO consider doing something different with these
-    # params = utils.SimulationParams(
-    #     r_c=r_c,  # Radius of the droplet in meters
-    #     hmax0=maxh0,  # Initial droplet height at the center in meters
-    #     Nr=214,  # Number of radial points
-    #     Nz=110,  # Number of z-axis points
-    #     dr=2 * r_c / (214 - 1),  # Radial grid spacing
-    #     dz=maxh0 / (110 - 1),  # Vertical grid spacing
-    #     rho=1,  # Density of the liquid (kg/m^3) eg 1
-    #     sigma=0.072,  # Surface tension (N/m) eg 0.072
-    #     eta=1e-3,  # Viscosity (Pa*s) eg 1e-3
-    # )
     params = utils.SimulationParams(
-        r_c=1e-3,  # Radius of the droplet in meters
+        r_grid=1.0e-3,  # Radius of the droplet in meters
         hmax0=5e-4,  # Initial droplet height at the center in meters
-        Nr=214,  # Number of radial points
+        Nr=640,  # Number of radial points
         Nz=110,  # Number of z-axis points
-        dr=2 * 1e-3 / (214 - 1),  # Radial grid spacing
+        dr= 2 * 1.0e-3 / (256 - 1),  # Radial grid spacing
         dz=5e-4 / (110 - 1),  # Vertical grid spacing
         rho=1,  # Density of the liquid (kg/m^3) eg 1
         sigma=0.072,  # Surface tension (N/m) eg 0.072
-        eta=1e-5,  # Viscosity (Pa*s) eg 1e-3
-    )
-    Nt = 1000
-    dt = 1e-4
-    t_lin = torch.linspace(0, dt * Nt, Nt)
+        eta=1e-3,  # Viscosity (Pa*s) eg 1e-5
 
-    def evap_model(h, kappa=0.0):
-        return -kappa * torch.arange(len(h)) / len(h)
+        A = 8.07131, # Antoine Equation (-)
+        B = 1730.63, # Antoine Equation (-)
+        C = 233.4, # Antoine Equation (-)
+        D = 2.42e-5, # Diffusivity of H2O in Air (m^2/s)
+        Mw = 0.018, # Molecular weight H2O vapor (kg/mol)
+        #Rs = 8.314, # Gas Constant (J/(K*mol))
+        Rs = 461.5, # Gas Constant (J/(K*kg))
+        T = 293.15, # Ambient Temperature (K)
+        RH = 0.20, # Relative Humidity (-)
+    )
+    Nt = 100
+    dt = 1e-2
+    t_lin = torch.linspace(0, dt * Nt, Nt)
 
     def smoothing_fn(x):
         return utils.gaussian_blur_1d(x, sigma=10)
 
-    drop_model = PureDropModel(params, evap_model=evap_model, smoothing_fn=smoothing_fn)
+    # Working Evap Choices: [no_evap_model, constant_evap_model, deegan_evap_model]
+    drop_model = PureDropModel(params, evap_model=evap_models.deegan_evap_model, smoothing_fn=smoothing_fn)
+
+    r_c = 0.5*params.r_grid
 
     h_0 = utils.setup_polynomial_initial_h_profile(
-        drop_model.r, 0.8 * params.hmax0, params.r_c, order=2
+        drop_model.r, 0.8 * params.hmax0, r_c, order=4
     )
+    #h_0 = utils.setup_cap_initial_h_profile(drop_model.r, 0.8 * params.hmax0, r_c
+    #)
 
     drop_viz.flow_viz(drop_model, h_0, 0, 0)
 
@@ -201,11 +244,12 @@ def main():
     h_history = utils.run_forward_euler_simulation(drop_model, h_0, t_lin, post_fn)
     drop_viz.plot_height_profile_evolution(drop_model.r, h_history, params)
 
-    # plot the velocity profile and
     # drop_viz.inspect(drop_model, h_history[-1].clone())
-    # drop_viz.plot_velocity(drop_model, h_history[-1].clone())
-    drop_viz.inspect(drop_model, h_history[0].clone())
-    drop_viz.plot_velocity(drop_model, h_history[0].clone(), 0, 0)
+    drop_viz.plot_velocity(drop_model, h_history[-1].clone())
+    #drop_viz.inspect(drop_model, h_history[0].clone())
+    #drop_viz.plot_velocity(drop_model, h_history[0].clone(), 0, 0)
+    drop_viz.flow_viz(drop_model, h_history[-1].clone(), 0, 0)
+    #drop_viz.flow_viz(drop_model, h_history[-1].clone())
 
 
 if __name__ == "__main__":
