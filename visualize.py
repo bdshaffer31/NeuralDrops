@@ -38,6 +38,7 @@ def fno_node_traj_pred_from_dataset(model, dataset, run_name, t_0_idx=1):
         initial_state = dataset.data[run_name]["profile"][t_0_idx].unsqueeze(0)
         initial_state = initial_state * dataset.profile_scale
         time_steps = dataset.data[run_name]["t_lin"][t_0_idx:]
+        time_steps = torch.arange(time_steps.shape[0]).to(torch.float64)
         pred_traj = model(initial_state, conditioning, time_steps).squeeze()
         return pred_traj
 
@@ -79,9 +80,18 @@ def viz_results(run_dir):
         config["model_type"], model, dataset, viz_file, t_0_idx=1
     )
 
+    plt.plot(height_data[0], c="k", linewidth=2)
+    plt.plot(pred_traj[0], c="maroon", linewidth=2)
+    log_loader.show(plt)
+
+
+    plt.plot(height_data[0], c="k", linewidth=2)
+    plt.plot(pred_traj[0], c="maroon", linewidth=2)
     for data_state, pred_state in zip(height_data[::100], pred_traj[::100]):
         plt.plot(data_state, c="dimgrey")
         plt.plot(pred_state, c="r")
+    plt.plot(height_data[-1], c="k", linewidth=2)
+    plt.plot(pred_traj[-1], c="maroon", linewidth=2)
     plt.ylabel("h")
     plt.xlabel("X")
     log_loader.show(plt)

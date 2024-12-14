@@ -18,7 +18,7 @@ def default_params():
         dz=5e-4 / (110 - 1),  # Vertical grid spacing
         rho=1,  # Density of the liquid (kg/m^3) eg 1
         sigma=0.072,  # Surface tension (N/m) eg 0.072
-        eta=1e-5,  # Viscosity (Pa*s) eg 1e-3
+        eta=1e-3,  # Viscosity (Pa*s) eg 1e-3
 
         A = 8.07131, # Antoine Equation (-)
         B = 1730.63, # Antoine Equation (-)
@@ -34,7 +34,8 @@ def default_params():
 
 
 def run_sim(h0, params, t_lin):
-    evap_model = evap_models.constant_evap_model
+    def constant_evap_model(params, h, z = None, kappa=1.0e-5):
+        return -kappa * torch.ones_like(h)
 
     def smoothing_fn(x):
         return utils.gaussian_blur_1d(x, sigma=10)
@@ -44,7 +45,7 @@ def run_sim(h0, params, t_lin):
         h = utils.drop_polynomial_fit(h, 8)  # project height on polynomial basis
         return h
 
-    drop_model = PureDropModel(params, evap_model=evap_model, smoothing_fn=smoothing_fn)
+    drop_model = PureDropModel(params, evap_model=constant_evap_model, smoothing_fn=smoothing_fn)
 
     h_history = utils.run_forward_euler_simulation(drop_model, h0, t_lin, post_fn)
 
@@ -67,8 +68,8 @@ def main():
     r_lin = torch.linspace(-params.r_grid, params.r_grid, params.Nr)
     z_lin = torch.linspace(0, params.hmax0, params.Nz)
     x_lin = torch.linspace(-1, 1, params.Nr)
-    Nt = 500
-    dt = 5e-5
+    Nt = 2000
+    dt = 5e-4
     t_lin = torch.linspace(0, dt * Nt, Nt)
 
     for i in range(10):

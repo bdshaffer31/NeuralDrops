@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 import torch
 import torch.nn.functional as F
+from functorch import vmap
 
 
 @dataclass
@@ -161,8 +162,6 @@ def drop_polynomial_fit(h_0, degree=3):
     coeffs, *_ = torch.linalg.lstsq(A, h_0_nonzero.unsqueeze(1))
     h_0_fitted = (A @ coeffs).squeeze(1)
 
-    
-
     h_0_fitted_full = h_0.clone()
     h_0_fitted_full[start_idx:end_idx] = h_0_fitted
 
@@ -170,6 +169,125 @@ def drop_polynomial_fit(h_0, degree=3):
     h_shifted = torch.roll(h_0_fitted_full, shifts=shift)
 
     return h_shifted
+
+def drop_polynomial_fit_fixed(h_0, degree=3, fixed_length=50):
+    """
+    vmap-compatible version that fits a polynomial to a fixed-length region of h_0.
+
+    Args:
+        h_0 (torch.Tensor): Tensor of shape (n,) representing a height profile.
+        degree (int): Degree of the polynomial to fit.
+        fixed_length (int): Fixed length of the region to fit the polynomial to.
+
+    Returns:
+        torch.Tensor: Tensor of shape (n,) with fitted and shifted height profile.
+    """
+    dtype = h_0.dtype
+    device = h_0.device
+    n = h_0.shape[0]
+
+    # Create a mask for non-zero elements
+    mask = torch.abs(h_0) > 1e-8
+
+    # Find the approximate center of the non-zero region
+    indices = torch.arange(n, device=device)
+    non_zero_indices = torch.where(mask, indices, n)
+    start_idx = non_zero_indices.min()
+    end_idx = non_zero_indices.max() + 1
+
+    # Ensure the indices are valid
+    # if start_idx >= end_idx:
+    #     return h_0
+
+    center_idx = (start_idx + end_idx) // 2
+
+    # Extract a fixed-length region around the center
+    half_length = fixed_length // 2
+    start = max(center_idx - half_length, 0)
+    end = min(start + fixed_length, n)
+    start = end - fixed_length  # Ensure the region is always `fixed_length` long
+
+    h_0_region = h_0[start:end]
+    x_region = torch.linspace(0, 1, steps=fixed_length, dtype=dtype, device=device)
+
+    # Fit a polynomial of the given degree
+    powers = torch.arange(degree + 1, dtype=dtype, device=device)
+    A = x_region.unsqueeze(1) ** powers
+    coeffs, *_ = torch.linalg.lstsq(A, h_0_region.unsqueeze(1))
+    h_0_fitted = (A @ coeffs).squeeze(1)
+
+    # Create the full fitted tensor
+    h_0_fitted_full = h_0.clone()
+    h_0_fitted_full[start:end] = h_0_fitted
+
+    return h_0_fitted_full
+
+def drop_polynomial_fit_batch_vmap(h_batch, degree=3):
+    return vmap(lambda h_0: drop_polynomial_fit_fixed(h_0, degree))(h_batch)
+
+def drop_polynomial_fit_batch(h_0_batch, degree=3, pad_length=50):
+    """
+    Batch-parallelizable function to fit a polynomial of a given degree to the non-zero interior portion of h_0.
+
+    Args:
+        h_0_batch (torch.Tensor): Tensor of shape (batch_size, n) where each row represents a height profile.
+        degree (int): Degree of the polynomial to fit.
+        pad_length (int): Fixed length to pad/truncate non-zero regions for polynomial fitting.
+
+    Returns:
+        torch.Tensor: Tensor of shape (batch_size, n) with fitted and shifted height profiles.
+    """
+    batch_size, n = h_0_batch.shape
+    dtype = h_0_batch.dtype
+
+    # Step 1: Identify non-zero regions
+    mask = torch.abs(h_0_batch) > 1e-8
+    non_zero_indices = [torch.where(mask[i])[0] for i in range(batch_size)]
+
+    # Initialize the result tensor
+    h_0_fitted_batch = h_0_batch.clone()
+
+    for i in range(batch_size):
+        indices = non_zero_indices[i]
+        if len(indices) == 0:
+            continue  # If there are no non-zero elements, keep the original tensor
+
+        # Get the start and end indices of the non-zero region
+        start_idx = indices[0]
+        end_idx = indices[-1] + 1
+
+        # Extract the non-zero portion
+        h_0_nonzero = h_0_batch[i, start_idx:end_idx]
+
+        # Create x values for the non-zero portion
+        length = h_0_nonzero.shape[0]
+        x_nonzero = torch.linspace(0, 1, steps=length, dtype=dtype)
+
+        # Pad or truncate the non-zero portion to `pad_length`
+        if length < pad_length:
+            pad_size = pad_length - length
+            h_0_nonzero_padded = torch.nn.functional.pad(h_0_nonzero, (0, pad_size))
+            x_nonzero_padded = torch.linspace(0, 1, steps=pad_length, dtype=dtype)
+        else:
+            h_0_nonzero_padded = h_0_nonzero[:pad_length]
+            x_nonzero_padded = torch.linspace(0, 1, steps=pad_length, dtype=dtype)
+
+        # Step 2: Fit a polynomial to the non-zero portion
+        powers = torch.arange(degree + 1, dtype=dtype)
+        A = x_nonzero_padded.unsqueeze(1) ** powers
+        coeffs, *_ = torch.linalg.lstsq(A, h_0_nonzero_padded.unsqueeze(1))
+
+        # Compute the fitted values
+        h_0_fitted = (A @ coeffs).squeeze(1)
+
+        # Replace the fitted portion in the original tensor
+        h_0_fitted_batch[i, start_idx:start_idx + pad_length] = h_0_fitted[:length]
+
+        # Step 3: Compute the shift to center the fitted profile
+        shift = int(n // 2 - (end_idx + start_idx) / 2)
+        h_0_fitted_batch[i] = torch.roll(h_0_fitted_batch[i], shifts=shift)
+
+    return h_0_fitted_batch
 
 
 def drop_center_polynomial_fit(h_0, degree=3, mask_size=10, fit_size=20):

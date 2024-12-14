@@ -46,10 +46,6 @@ def train(
 
         if model_type in ["node", "fno_node", "flux_fno"]:
             for t, x_0, z, y_traj in train_loader:
-                # print("t", t.shape, torch.min(t), torch.max(t))
-                # print("x_0", x_0.shape, torch.min(x_0), torch.max(x_0))
-                # print("z", z.shape, torch.min(z), torch.max(z))
-                # print("y_traj", y_traj.shape, torch.min(y_traj), torch.max(y_traj))
                 optimizer.zero_grad()
                 pred_y_traj = model(x_0, z, t[0]).transpose(0, 1)
                 loss = loss_fn(pred_y_traj, y_traj)
@@ -220,11 +216,16 @@ def init_flux_fno(config):
 
     flow_model = pure_drop_model.PureDropModel(params, smoothing_fn=smoothing_fn)
 
-    print("dt", dt)
-    # TODO random ass dt scaling to get shit moving
-    dt = dt * 1
+    import matplotlib.pyplot as plt
+    def post_fn(h):
+        h = torch.clamp(h, min=0)  # ensure non-negative height
+        # half_len = h.size(1) // 2
+        # h[:,:half_len] = torch.flip(h[:,half_len:], dims=[1])
+        h = utils.drop_polynomial_fit_batch(h, 8)  # project height on polynomial basis
+        return h
+
     ode_func = networks.FNOFluxODEWrapper(fno_model, flow_model, profile_scale=config["profile_scale"], time_scale=dt)
-    model = networks.FNOFluxODESolver(ode_func, time_step=dt, solver_type=model_config["solver"] )
+    model = networks.FNOFluxODESolver(ode_func, time_step=1, solver_type=model_config["solver"], post_fn=post_fn)
     return model
 
 

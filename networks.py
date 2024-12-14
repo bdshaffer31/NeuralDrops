@@ -2,6 +2,7 @@ from torchdiffeq import odeint_adjoint as odeint
 from torch import nn
 import torch
 
+torch.set_default_dtype(torch.float64)
 
 class FCNN(nn.Module):
     def __init__(
@@ -153,7 +154,7 @@ class SpectralConv1d(nn.Module):
         self.scale = 1 / (in_channels * out_channels)
         self.weights = nn.Parameter(
             self.scale
-            * torch.rand(in_channels, out_channels, self.modes, dtype=torch.cfloat)
+            * torch.rand(in_channels, out_channels, self.modes, dtype=torch.cdouble)
         )
 
     def compl_mul1d(self, input, weights):
@@ -166,7 +167,7 @@ class SpectralConv1d(nn.Module):
         x_ft = torch.fft.rfft(x)
 
         # Multiply relevant modes
-        out_ft = torch.zeros_like(x_ft, dtype=torch.cfloat)
+        out_ft = torch.zeros_like(x_ft, dtype=torch.cdouble)
         out_ft[:, :, : self.modes] = self.compl_mul1d(
             x_ft[:, :, : self.modes], self.weights
         )
@@ -245,57 +246,56 @@ class FNOFluxODEWrapper(nn.Module):
 
     def forward(self, t, h): # Predict dh_dt
 
-        # TODO getting complex h values
         if self.flow_model is None:
             flux = self.evap_model(h, self.conditioning)
             return -flux # Negative sign to represent evaporation
         
         def flow_model_scaled(h_in):
             h_scaled = h_in / self.profile_scale
-            # print("h_scaled", h_scaled.shape, torch.min(h_scaled), torch.max(h_scaled))
-
             flow_dh_dt = self.flow_model.calc_flow_dh_dt(h_scaled)
             return flow_dh_dt * self.profile_scale
-        
-        # print("profile_scale", self.profile_scale)
-        # print("h", h.shape, torch.min(h), torch.max(h))
+
         flow_model = torch.vmap(flow_model_scaled, in_dims=0)
         flow_term = flow_model(h)
-        # print("h", h.shape, torch.min(h), torch.max(h))
-        # print("f", flow_term.shape, torch.min(flow_term), torch.max(flow_term))
-        evap_term = self.evap_model(h.to(torch.float32), self.conditioning)
-        # print("e", evap_term.shape, torch.min(evap_term), torch.max(evap_term))
+        evap_term = self.evap_model(h, self.conditioning)
+        # evap_term = torch.clip(evap_term, max=1e-4)
+        half_len = evap_term.size(1) // 2
+        evap_term[:,:half_len] = torch.flip(evap_term[:,half_len:], dims=[1])
+        evap_term = torch.abs(evap_term)
+        import drop_model.utils as utils
+        evap_term = utils.drop_polynomial_fit_batch(evap_term, 8)
+        # flow_term = utils.drop_polynomial_fit_batch(flow_term, 8)
 
-        # with torch.no_grad():
-        #     import matplotlib.pyplot as plt
-        #     plt.plot(h[0], label="h")
-        #     plt.plot(flow_term[0], label="f")
-        #     plt.plot(evap_term[0], label="e")
-        #     plt.legend()
-        #     plt.show()
+        # import matplotlib.pyplot as plt
+        # plt.plot(h[0].detach(), label='h')
+        # plt.plot(flow_term[0].detach(), label='f')
+        # plt.plot(evap_term[0].detach(), label='evap')
+        # plt.legend()
+        # plt.show()
 
-        # random eyeballed scaling to get flux on scale or flow
-        dh_dt = flow_term - 1e0*evap_term
+
+        dh_dt = self.time_scale*flow_term + 0.0*evap_term
 
         return dh_dt
 
 
 class FNOFluxODESolver(nn.Module):
-    def __init__(self, ode_func, time_step = 1, solver_type="rk4"):
+    def __init__(self, ode_func, time_step = 1, solver_type="rk4", post_fn=None):
         super(FNOFluxODESolver, self).__init__()
         self.ode_func = ode_func
         self.solver_type = solver_type
         #Shift spot where time_step is
         self.time_step = time_step
+        self.post_fn = post_fn
         self.solver = self.init_solver()
 
     def init_solver(self):
         if self.solver_type == "euler":
-            return ForwardEuler(self.ode_func, self.time_step)
+            return ForwardEuler(self.ode_func, self.time_step, self.post_fn)
         elif self.solver_type == "rk4":
-            return RK4(self.ode_func, self.time_step)
+            return RK4(self.ode_func, self.time_step, self.post_fn)
         elif self.solver_type == "implicit_euler":
-            return ImplicitEuler(self.ode_func, self.time_step)
+            return ImplicitEuler(self.ode_func, self.time_step, self.post_fn)
 
     def forward(self, *args):
         return self.solver.forward(*args)
@@ -304,10 +304,11 @@ class FNOFluxODESolver(nn.Module):
 class ForwardEuler(nn.Module):
     """Explicit forward Euler solver"""
 
-    def __init__(self, ode_func, time_step):
+    def __init__(self, ode_func, time_step, post_fn):
         super(ForwardEuler, self).__init__()
         self.ode_func = ode_func
         self.time_step = time_step
+        self.post_fn = post_fn
 
     def forward(self, x0, z, t):
         self.ode_func.set_conditioning(z)
@@ -320,7 +321,8 @@ class ForwardEuler(nn.Module):
         x_history[0] = x
         for i in range(1, num_steps):
             x = x + dt * self.ode_func(t[i - 1], x)
-            x = torch.max(torch.zeros_like(x), x)  # height always positive !!!
+            # x = torch.max(torch.zeros_like(x), x)  # height always positive !!!
+            x = self.post_fn(x)
             x_history[i] = x
 
         return x_history
