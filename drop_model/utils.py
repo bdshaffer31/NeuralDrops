@@ -226,3 +226,11 @@ def drop_center_polynomial_fit(h_0, degree=3, mask_size=10, fit_size=20):
     h_0_smoothed[mask_start:mask_end] = h_0_fitted_mask
 
     return h_0_smoothed
+
+def dis_press(r_grid, hmax0, sigma):
+    h_star = hmax0/100
+    n = 3
+    m = 2
+    theta_e = 2*torch.arctan(torch.tensor(params.hmax0/(0.5*r_grid)))
+    dis_press = -sigma*torch.square(torch.tensor(theta_e))*(n-1)*(m-1)/(n-m)/(2*h_star)*(torch.pow(torch.tensor(h_star/hmax0), n)-torch.pow(torch.tensor(h_star/hmax0), m))
+    return dis_press

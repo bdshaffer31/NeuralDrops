@@ -1,6 +1,4 @@
 import torch
-import os
-os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"
 
 class PureDropModel:
     def __init__(self, params, evap_model=None, smoothing_fn=None, z_fno=None):
@@ -35,13 +33,7 @@ class PureDropModel:
         curvature_term = self.calc_curvature(h)
         d_curvature_dr = self.grad(curvature_term, self.params.dr)
         pressure = -self.params.sigma * self.safe_inv(self.r, 0.0) * d_curvature_dr
-
-        #h_star = self.params.hmax0/100
-        #n = 3
-        #m = 2
-        #theta_e = 2*torch.arctan(torch.tensor(self.params.hmax0/(0.5*self.params.r_grid)))
-        #dis_press = -self.params.sigma*torch.square(torch.tensor(theta_e))*(n-1)*(m-1)/(n-m)/(2*h_star)*(torch.pow(torch.tensor(h_star/self.params.hmax0), n)-torch.pow(torch.tensor(h_star/self.params.hmax0), m))
-        return pressure #+ dis_press
+        return pressure
 
     # u velocity calculation
     def calc_u_velocity(self, h):
@@ -104,9 +96,13 @@ class PureDropModel:
             masked_grid_in[lower_index_in] = occupation_percent * value_above
 
             #TODO !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-            idx = lower_index_in.int() + 1
-            #masked_grid_in[idx :] = 0
-            masked_grid_in[5 :] = 0
+            indices = torch.linspace(0, len(masked_grid_in) -1, len(masked_grid_in))
+            idx = torch.index_select(indices, 0, lower_index_in)
+            indices = torch.linspace(idx, z_in[-1] - 1, int(z_in[-1] - idx))
+
+            #masked_grid_in[idx + 1 :] = 0
+            #masked_grid_in[5 :] = 0
+            masked_grid_in.index_fill_(0, indices, 0.0)
             #TODO !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             return masked_grid_in
         h = torch.unsqueeze(h, 1)
@@ -115,6 +111,7 @@ class PureDropModel:
         masked_grid = torch.vmap(mask, in_dims = (0, 0, 0, None))(masked_grid, h, lower_indices, z)
         return masked_grid
     
+    #TODO Remove once new is fixed
     def interp_h_mask_grid_old(self, grid_data, h, z):
         dz = z[1] - z[0]
         masked_grid = grid_data.clone()
@@ -156,15 +153,15 @@ class PureDropModel:
         return flow_dh_dt
 
     # Evaporation-induced dh/dt calculation
-    def calc_evap_dh_dt(self, h, z_FNO):
+    def calc_evap_dh_dt(self, h):
         if self.evap_model is None:
             return torch.zeros_like(h)
         return self.evap_model(self.params, self.r, h)
 
     # Total dh/dt calculation
-    def calc_dh_dt(self, h, z_FNO=None):
+    def calc_dh_dt(self, h):
         #return self.calc_flow_dh_dt(h) + self.calc_evap_dh_dt(self.r, h, z = None)
-        return self.calc_flow_dh_dt(h) + self.calc_evap_dh_dt(h, z_FNO) #Currently formatted for use with evap_model = fno_model #TODO
+        return self.calc_flow_dh_dt(h) + self.calc_evap_dh_dt(h)
 
 
 def main():
@@ -197,8 +194,7 @@ def main():
         T = 293.15, # Ambient Temperature (K)
         RH = 0.20, # Relative Humidity (-)
     )
-    Nt = 3000
-
+    Nt = 100
     dt = 1e-2
     t_lin = torch.linspace(0, dt * Nt, Nt)
 
@@ -213,7 +209,6 @@ def main():
     h_0 = utils.setup_polynomial_initial_h_profile(
         drop_model.r, 0.8 * params.hmax0, r_c, order=4
     )
-
     #h_0 = utils.setup_cap_initial_h_profile(drop_model.r, 0.8 * params.hmax0, r_c
     #)
 
@@ -223,13 +218,10 @@ def main():
         h = torch.clamp(h, min=0)  # ensure non-negative height
         h = utils.drop_polynomial_fit(h, 8)  # project height on polynomial basis
         return h
-    
-    #print(h_0)
 
     h_history = utils.run_forward_euler_simulation(drop_model, h_0, t_lin, post_fn)
     drop_viz.plot_height_profile_evolution(drop_model.r, h_history, params)
 
-    # plot the velocity profile and
     # drop_viz.inspect(drop_model, h_history[-1].clone())
     drop_viz.plot_velocity(drop_model, h_history[-1].clone())
     #drop_viz.inspect(drop_model, h_history[0].clone())
