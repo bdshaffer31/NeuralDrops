@@ -158,7 +158,7 @@ def init_flux_fno(model_config):
     params = utils.SimulationParams(
         r_grid = 1280 * model_config["pixel_resolution"],
         hmax0=1024 * model_config["pixel_resolution"] * model_config["profile_scale"],
-        Nr=int(1280 / model_config["spatial_sampling"]),
+        Nr=int(1280 / model_config["spatial_sampling"])+1,
         Nz=110,
         dr= 2 * 1280 * model_config["pixel_resolution"] / (int(1280 / model_config["spatial_sampling"]) - 1),
         dz=1024 * model_config["pixel_resolution"] * model_config["profile_scale"] / (110 - 1),
@@ -180,7 +180,7 @@ def init_flux_fno(model_config):
 
     flow_model = pure_drop_model.PureDropModel(params, smoothing_fn=smoothing_fn)
 
-    ode_func = networks.FNOFluxODEWrapper(fno_model, flow_model, profile_scaler=model_config["profile_scale"])
+    ode_func = networks.FNOFluxODEWrapper(fno_model, flow_model, profile_scale=model_config["profile_scale"])
     model = networks.FNOFluxODESolver(ode_func, model_config["time_inc"], solver_type=model_config["solver"] )
     return model
 

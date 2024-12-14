@@ -232,11 +232,11 @@ class FNO_Flux(FNO):
 
 
 class FNOFluxODEWrapper(nn.Module):
-    def __init__(self, model, flow_model=None, profile_scaler=1):
+    def __init__(self, model, flow_model=None, profile_scale=1):
         super(FNOFluxODEWrapper, self).__init__()
         self.evap_model = model
         self.flow_model = flow_model
-        self.profile_scaler = profile_scaler
+        self.profile_scale = profile_scale
         self.conditioning = None
 
     def set_conditioning(self, z):
@@ -256,7 +256,7 @@ class FNOFluxODEWrapper(nn.Module):
         
         flow_model = torch.vmap(flow_model_scaled, in_dims=0)
 
-        return flow_model(h) - self.evap_model(h, self.conditioning)
+        return flow_model(h) - self.evap_model(h.to(torch.float32), self.conditioning)
 
 
 class FNOFluxODESolver(nn.Module):
@@ -264,9 +264,9 @@ class FNOFluxODESolver(nn.Module):
         super(FNOFluxODESolver, self).__init__()
         self.ode_func = ode_func
         self.solver_type = solver_type
-        self.solver = self.init_solver()
         #Shift spot where time_step is
         self.time_step = time_step
+        self.solver = self.init_solver()
 
     def init_solver(self):
         if self.solver_type == "euler":

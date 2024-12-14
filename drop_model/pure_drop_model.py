@@ -59,8 +59,8 @@ class PureDropModel:
 
         u_grid = self.interp_h_mask_grid(u_grid, h, self.z)
 
-        u_grid[u_grid > 10] = 10
-        u_grid[u_grid < -10] = -10
+        # u_grid[u_grid > 10] = 10
+        # u_grid[u_grid < -10] = -10
         return u_grid
 
     # w velocity calculation
@@ -75,13 +75,13 @@ class PureDropModel:
         )
         w_grid = self.interp_h_mask_grid(w_grid, h, self.z)
 
-        w_grid[w_grid > 10] = 10
-        w_grid[w_grid < -10] = -10
+        # w_grid[w_grid > 10] = 10
+        # w_grid[w_grid < -10] = -10
         return w_grid
 
 
     #u_grid = self.interp_h_mask_grid(u_grid, h, self.z)
-    def interp_h_mask_grid(self, grid_data, h, z):
+    def interp_h_mask_grid_mdm(self, grid_data, h, z):
         dz = z[1] - z[0]
         masked_grid = grid_data.clone()
 
@@ -109,6 +109,28 @@ class PureDropModel:
         lower_indices = torch.unsqueeze(lower_indices, 1)
 
         masked_grid = torch.vmap(mask, in_dims = (0, 0, 0, None))(masked_grid, h, lower_indices, z)
+        return masked_grid
+
+
+    def interp_h_mask_grid(self, grid_data, h, z):
+        dz = z[1] - z[0]
+        masked_grid = grid_data.clone()
+
+        lower_indices = torch.searchsorted(z, h) - 1
+        lower_indices = torch.clamp(lower_indices, 0, len(z) - 2)
+
+        batch_size = grid_data.shape[0]
+        batch_indices = torch.arange(batch_size)
+
+        z_below = z[lower_indices]
+        value_above = grid_data[batch_indices, lower_indices]
+        occupation_percent = (h - z_below) / dz
+        masked_grid[batch_indices, lower_indices] = occupation_percent * value_above
+        grid_size = grid_data.shape[1]
+        indices = torch.arange(grid_size).expand(batch_size, -1)
+        mask = indices <= lower_indices.unsqueeze(1)
+        masked_grid *= mask
+
         return masked_grid
     
     #TODO Remove once new is fixed
@@ -170,7 +192,7 @@ def main():
     import evap_models
 
     drop_viz.set_styling()
-    torch.set_default_dtype(torch.float64)
+    torch.set_default_dtype(torch.float32)
 
     # TODO consider doing something different with these
     params = utils.SimulationParams(

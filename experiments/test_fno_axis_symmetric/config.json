@@ -25,6 +25,10 @@
         "fc_width": 256,
         "activation_fn": "relu",
         "solver": "euler",
+        "profile_scale": 100,
+        "pixel_resolution": 3e-06,
+        "spatial_sampling": 6,
+        "time_inc": 0.004166666666666667,
         "conditioning_dim": 3,
         "input_dim": 4,
         "output_dim": 1

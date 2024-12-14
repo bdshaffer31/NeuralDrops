@@ -264,7 +264,7 @@ class FNODataset(Dataset):
             profile_key (str): Key to access the profile data in each sample.
         """
         self.run_keys = run_keys
-        self.data = {k: v for k, v in data.items() if run_keys is None or k in run_keys}
+        self.data = {k: v.to(torch.float32) for k, v in data.items() if run_keys is None or k in run_keys}
         self.conditioning_keys = conditioning_keys
         self.profile_key = profile_key
         self.profile_scale = profile_scale
