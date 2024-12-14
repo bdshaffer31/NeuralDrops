@@ -2,8 +2,9 @@
     "run_dir": "test_fno_axis_symmetric",
     "manual_seed": 42,
     "num_epochs": 10,
+    "traj_len": 10,
     "lr": 0.01,
-    "model_type": "fno",
+    "model_type": "flux_fno",
     "data_file": "data/simulation_results.pth",
     "batch_size": 32,
     "val_ratio": 0.1,
@@ -19,12 +20,17 @@
     "model_config": {
         "modes": 16,
         "num_fno_layers": 4,
-        "fno_width": 256,
+        "fno_width": 64,
         "num_fc_layers": 4,
         "fc_width": 256,
         "activation_fn": "relu",
+        "solver": "euler",
+        "profile_scale": 100,
+        "pixel_resolution": 3e-06,
+        "spatial_sampling": 6,
+        "time_inc": 0.004166666666666667,
         "conditioning_dim": 3,
-        "input_dim": 5,
+        "input_dim": 4,
         "output_dim": 1
     }
 }

@@ -13,6 +13,10 @@ def flux_fno_model_config():
         "fc_width": 256,
         "activation_fn": "relu",
         "solver": "euler",
+        "profile_scale": 100,  # approx 1 / spacial unit order of magnitude
+        "pixel_resolution": 0.000003, # m / pixel
+        "spatial_sampling": 6, # m / pixel
+        "time_inc": 0.05/12, # time increment and temporal sampling
     }
     return model_config
 
@@ -41,6 +45,7 @@ def fno_model_config():
         "activation_fn": "relu",
     }
     return model_config
+
 
 
 def node_model_config():
@@ -72,8 +77,9 @@ def main(train=False):
         "run_dir": run_dir,
         "manual_seed": 42,
         "num_epochs": 10,
+        "traj_len": 10,
         "lr": 1e-2,
-        "model_type": "fno",  # specify model type
+        "model_type": "flux_fno",  # specify model type
         "data_file": "data/simulation_results.pth",  # specify data type
         "batch_size": 32,
         "val_ratio": 0.1,
@@ -93,4 +99,5 @@ def main(train=False):
 
 
 if __name__ == "__main__":
-    main(train=False)
+    main(train=True)
+    

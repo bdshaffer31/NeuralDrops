@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 @dataclass
 class SimulationParams:
-    r_c: float  # Radius of the droplet in meters
+    r_grid: float  # Radius of the droplet in meters
     hmax0: float  # Initial droplet height at the center in meters
     Nr: int  # Number of radial points
     Nz: int  # Number of z-axis points
@@ -15,23 +15,38 @@ class SimulationParams:
     sigma: float  # Surface tension (N/m)
     eta: float  # Viscosity (Pa*s)
 
+    # Antoine's Equation
+    A: float  
+    B: float
+    C: float
+
+    D: float #Diffusvity of Vapor
+    Mw: float #Molecular weight of Vapor
+
+    Rs: float #Gas Constant
+    T: float #Temperature of drop exterior
+    RH: float #Relative Humidity
+
 
 def setup_polynomial_initial_h_profile(r, h0, r_c, drop_fraction=1.0, order=2):
     # setup up a polynomial initial drop profile
     drop_fraction = 1.0  # percent of r taken up with drop (vs 0)
     h = torch.zeros_like(r)
-    occupied_length = int(drop_fraction * len(r))
-    h[:occupied_length] = h0 * (
-        1 - (r[:occupied_length] / (drop_fraction * r_c)) ** order
+    num_c = list(map(lambda i: i > -r_c, r)).index(True) + 1
+    h[num_c:-(num_c)] = h0 * (
+        1 - (r[num_c:-(num_c)]  / (drop_fraction * r_c)) ** order
     )
     return h
 
 
-def setup_cap_initial_h_profile(r, h0, r_c):
+def setup_cap_initial_h_profile(r_cap, h0, r_c):
+    h = torch.zeros_like(r_cap)
+    num_c = list(map(lambda i: i > -r_c, r_cap)).index(True) + 1
     # setup a spherical cap initial height profile
     R = (r_c**2 + h0**2) / (2 * h0)
     # theta = torch.arccos(torch.tensor([1 - h0 * R]))
-    h = torch.sqrt((2.0 * R * (r + R) - torch.square(r + R))) - (R - h0)
+    h[num_c:-(num_c)] = torch.sqrt((2.0 * R * (r_cap[num_c:-(num_c)] + R) - torch.square(r_cap[num_c:-(num_c)] + R))) - (R - h0)
+    #h = torch.sqrt((2.0 * R * (r + R) - torch.square(r + R))) - (R - h0)
 
     return h
 
@@ -47,6 +62,7 @@ def run_forward_euler_simulation(model, h0, t_lin, post_fn=None):
         )  # Print the current time step, use .item() to get the value
         dh_dt = model.calc_dh_dt(h)  # Compute dh/dt using the model
         h = h + dt * dh_dt  # Forward Euler step
+        h = torch.maximum(h, torch.tensor(0.0))  # Ensure non-negative height
         if post_fn is not None:
             h = post_fn(h)
         h_profiles.append(h.clone())  # Append a clone of the current height profile
@@ -145,10 +161,15 @@ def drop_polynomial_fit(h_0, degree=3):
     coeffs, *_ = torch.linalg.lstsq(A, h_0_nonzero.unsqueeze(1))
     h_0_fitted = (A @ coeffs).squeeze(1)
 
+    
+
     h_0_fitted_full = h_0.clone()
     h_0_fitted_full[start_idx:end_idx] = h_0_fitted
 
-    return h_0_fitted_full
+    shift = int(h_0.shape[0] // 2 - (end_idx + start_idx) / 2)
+    h_shifted = torch.roll(h_0_fitted_full, shifts=shift)
+
+    return h_shifted
 
 
 def drop_center_polynomial_fit(h_0, degree=3, mask_size=10, fit_size=20):
@@ -205,3 +226,11 @@ def drop_center_polynomial_fit(h_0, degree=3, mask_size=10, fit_size=20):
     h_0_smoothed[mask_start:mask_end] = h_0_fitted_mask
 
     return h_0_smoothed
+
+def dis_press(r_grid, hmax0, sigma):
+    h_star = hmax0/100
+    n = 3
+    m = 2
+    theta_e = 2*torch.arctan(torch.tensor(params.hmax0/(0.5*r_grid)))
+    dis_press = -sigma*torch.square(torch.tensor(theta_e))*(n-1)*(m-1)/(n-m)/(2*h_star)*(torch.pow(torch.tensor(h_star/hmax0), n)-torch.pow(torch.tensor(h_star/hmax0), m))
+    return dis_press
