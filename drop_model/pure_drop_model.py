@@ -1,13 +1,12 @@
 import torch
 
 class PureDropModel:
-    def __init__(self, params, evap_model=None, smoothing_fn=None, z_fno=None):
+    def __init__(self, params, evap_model=None, smoothing_fn=None):
         # Initialize with a height profile and a params object
         self.params = params
         self.r, self.z = self.setup_grids()
         self.evap_model = evap_model
         self.smoothing_fn = smoothing_fn
-        self.z_fno = z_fno
 
     def setup_grids(self):
         r = torch.linspace(-self.params.r_grid, self.params.r_grid, self.params.Nr)
@@ -182,7 +181,6 @@ class PureDropModel:
 
     # Total dh/dt calculation
     def calc_dh_dt(self, h):
-        #return self.calc_flow_dh_dt(h) + self.calc_evap_dh_dt(self.r, h, z = None)
         return self.calc_flow_dh_dt(h) + self.calc_evap_dh_dt(h)
 
 
@@ -216,7 +214,7 @@ def main():
         T = 293.15, # Ambient Temperature (K)
         RH = 0.20, # Relative Humidity (-)
     )
-    Nt = 100
+    Nt = 1000
     dt = 1e-2
     t_lin = torch.linspace(0, dt * Nt, Nt)
 
@@ -224,15 +222,15 @@ def main():
         return utils.gaussian_blur_1d(x, sigma=10)
 
     # Working Evap Choices: [no_evap_model, constant_evap_model, deegan_evap_model]
-    drop_model = PureDropModel(params, evap_model=evap_models.deegan_evap_model, smoothing_fn=smoothing_fn)
+    drop_model = PureDropModel(params, evap_model=evap_models.constant_evap_model, smoothing_fn=smoothing_fn)
 
     r_c = 0.5*params.r_grid
 
-    h_0 = utils.setup_polynomial_initial_h_profile(
-        drop_model.r, 0.8 * params.hmax0, r_c, order=4
-    )
-    #h_0 = utils.setup_cap_initial_h_profile(drop_model.r, 0.8 * params.hmax0, r_c
+    #h_0 = utils.setup_polynomial_initial_h_profile(
+    #    drop_model.r, 0.8 * params.hmax0, r_c, order=4
     #)
+    h_0 = utils.setup_cap_initial_h_profile(drop_model.r, 0.8 * params.hmax0, r_c
+    )
 
     drop_viz.flow_viz(drop_model, h_0, 0, 0)
 

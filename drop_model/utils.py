@@ -44,10 +44,7 @@ def setup_cap_initial_h_profile(r_cap, h0, r_c):
     num_c = list(map(lambda i: i > -r_c, r_cap)).index(True) + 1
     # setup a spherical cap initial height profile
     R = (r_c**2 + h0**2) / (2 * h0)
-    # theta = torch.arccos(torch.tensor([1 - h0 * R]))
     h[num_c:-(num_c)] = torch.sqrt((2.0 * R * (r_cap[num_c:-(num_c)] + R) - torch.square(r_cap[num_c:-(num_c)] + R))) - (R - h0)
-    #h = torch.sqrt((2.0 * R * (r + R) - torch.square(r + R))) - (R - h0)
-
     return h
 
 
@@ -158,6 +155,7 @@ def drop_polynomial_fit(h_0, degree=3):
     # Construct the Vandermonde matrix
     powers = torch.arange(degree + 1, dtype=torch.float64)
     A = x_nonzero.unsqueeze(1) ** powers
+    A = A.to(torch.float32)
     coeffs, *_ = torch.linalg.lstsq(A, h_0_nonzero.unsqueeze(1))
     h_0_fitted = (A @ coeffs).squeeze(1)
 
@@ -169,7 +167,7 @@ def drop_polynomial_fit(h_0, degree=3):
     shift = int(h_0.shape[0] // 2 - (end_idx + start_idx) / 2)
     h_shifted = torch.roll(h_0_fitted_full, shifts=shift)
 
-    return h_shifted
+    return h_0_fitted_full
 
 
 def drop_center_polynomial_fit(h_0, degree=3, mask_size=10, fit_size=20):

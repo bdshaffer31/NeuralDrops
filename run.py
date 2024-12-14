@@ -180,8 +180,8 @@ def init_flux_fno(model_config):
 
     flow_model = pure_drop_model.PureDropModel(params, smoothing_fn=smoothing_fn)
 
-    ode_func = networks.FNOFluxODEWrapper(fno_model, flow_model, profile_scale=model_config["profile_scale"])
-    model = networks.FNOFluxODESolver(ode_func, model_config["time_inc"], solver_type=model_config["solver"] )
+    ode_func = networks.FNOFluxODEWrapper(fno_model, flow_model, profile_scale=model_config["profile_scale"],time_inc = model_config["time_inc"],)
+    model = networks.FNOFluxODESolver(ode_func, solver_type=model_config["solver"] )
     return model
 
 

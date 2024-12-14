@@ -5,7 +5,6 @@ from scipy.io import loadmat
 import numpy as np
 import utils  # Assuming your utility functions are in utils.py
 from torch.utils.data import random_split, DataLoader
-import torch
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 
