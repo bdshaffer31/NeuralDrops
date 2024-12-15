@@ -10,6 +10,9 @@ import networks
 import logger
 import load_data
 
+import drop_model.utils as drop_utils
+from drop_model import pure_drop_model
+
 
 @torch.no_grad
 def validate(model_type, model, val_loader, loss_fn):
@@ -17,8 +20,14 @@ def validate(model_type, model, val_loader, loss_fn):
     val_loss = 0.0
     if model_type in ["node", "flux_fno", "fno_node"]:
         for t, x_0, z, y in val_loader:
-            y_pred = model(x_0, z, t[0]).transpose(0, 1)
-            loss = loss_fn(y_pred, y)
+            t = t[0]
+            sub_step = 9
+            total_points = (len(t) - 1) * (sub_step + 1) + 1
+            t_sub_stepped = torch.linspace(t[0], t[-1], steps=total_points)
+
+            y_pred = model(x_0, z, t_sub_stepped).transpose(0, 1)
+            y_pred_original_t = y_pred[:, :: sub_step + 1]
+            loss = loss_fn(y_pred_original_t, y)
             val_loss += loss.item()
     elif model_type == "fno":
         for t, h_0, z, h_t in val_loader:
@@ -47,8 +56,15 @@ def train(
         if model_type in ["node", "fno_node", "flux_fno"]:
             for t, x_0, z, y_traj in train_loader:
                 optimizer.zero_grad()
-                pred_y_traj = model(x_0, z, t[0]).transpose(0, 1)
-                loss = loss_fn(pred_y_traj, y_traj)
+
+                t = t[0]
+                sub_step = 9
+                total_points = (len(t) - 1) * (sub_step + 1) + 1
+                t_sub_stepped = torch.linspace(t[0], t[-1], steps=total_points)
+
+                pred_y_traj = model(x_0, z, t_sub_stepped).transpose(0, 1)
+                pred_y_traj_original_t = pred_y_traj[:, :: sub_step + 1]
+                loss = loss_fn(pred_y_traj_original_t, y_traj)
                 loss.backward()
                 optimizer.step()
                 epoch_loss += loss.item()
@@ -88,7 +104,8 @@ def load_model_from_log_loader(log_loader):
     return model
 
 
-def init_node_model(model_config):
+def init_node_model(config):
+    model_config = config["model_config"]
     activation_fn = networks.get_activation(model_config["activation_fn"])
     model = networks.FNO(
         model_config["input_dim"],
@@ -103,7 +120,8 @@ def init_node_model(model_config):
     return model
 
 
-def init_fno_model(model_config):
+def init_fno_model(config):
+    model_config = config["model_config"]
     activation_fn = networks.get_activation(model_config["activation_fn"])
     model = networks.FNO(
         model_config["input_dim"],
@@ -118,7 +136,8 @@ def init_fno_model(model_config):
     return model
 
 
-def init_fno_node(model_config):
+def init_fno_node(config):
+    model_config = config["model_config"]
     activation_fn = networks.get_activation(model_config["activation_fn"])
     fno_model = networks.FNO_Flux(
         model_config["input_dim"],
@@ -135,8 +154,30 @@ def init_fno_node(model_config):
     return model
 
 
-def init_flux_fno(model_config):
-    
+def init_flux_fno(config):
+    model_config = config["model_config"]
+
+    # all post-processing function / smoothings regularizations etc for solver
+    def flux_post_fn(h):
+        h = drop_utils.drop_polynomial_fit_batch(h, 8)
+        h = drop_utils.symmetrize(h)
+        return h
+
+    def smoothing_fn(x): # reconfigure this into flow post function to be consistent
+        return drop_utils.gaussian_blur_1d(x, sigma=10)
+
+    def solver_post_fn(h):
+        h = torch.clamp(h, min=0)  # ensure non-negative height
+        # h = drop_utils.symmetrize(h) # may be needed
+        h = drop_utils.drop_polynomial_fit_batch(
+            h, 8
+        )  # project height on polynomial basis
+        h = drop_utils.symmetrize(h)
+        return h
+
+    data = torch.load(config["data_file"])
+    drop_params, dt = drop_utils.load_drop_params_from_data(data)
+
     activation_fn = networks.get_activation(model_config["activation_fn"])
     fno_model = networks.FNO_Flux(
         model_config["input_dim"],
@@ -147,53 +188,34 @@ def init_flux_fno(model_config):
         activation_fn=activation_fn,
         num_fc_layers=model_config["num_fc_layers"],
         fc_width=model_config["fc_width"],
+        gamma=model_config["gamma"],
+        model_scale=model_config["flux_model_scale"],
+        post_fn=flux_post_fn,
     )
-    
-    from drop_model import pure_drop_model, utils
-    def smoothing_fn(x):
-        return utils.gaussian_blur_1d(x, sigma=10)
-    
 
-    #TODO Possibly grad grid params from data
-    params = utils.SimulationParams(
-        r_grid = 1280 * model_config["pixel_resolution"],
-        hmax0=1024 * model_config["pixel_resolution"] * model_config["profile_scale"],
-        Nr=int(1280 / model_config["spatial_sampling"])+1,
-        Nz=110,
-        dr= 2 * 1280 * model_config["pixel_resolution"] / (int(1280 / model_config["spatial_sampling"]) - 1),
-        dz=1024 * model_config["pixel_resolution"] * model_config["profile_scale"] / (110 - 1),
-        rho=1,
-        sigma=0.072,
-        eta=1e-3,
-
-        #TODO 
-        A = 8.07131,
-        B = 1730.63,
-        C = 233.4,
-        D = 2.42e-5,
-        Mw = 0.018,
-        #Rs = 8.314,
-        Rs = 461.5,
-        T = 293.15,
-        RH = 0.20,
-        )
-
-    flow_model = pure_drop_model.PureDropModel(params, smoothing_fn=smoothing_fn)
-
-    ode_func = networks.FNOFluxODEWrapper(fno_model, flow_model, profile_scale=model_config["profile_scale"])
-    model = networks.FNOFluxODESolver(ode_func, model_config["time_inc"], solver_type=model_config["solver"] )
+    flow_model = pure_drop_model.PureDropModel(drop_params, smoothing_fn=smoothing_fn)
+    neural_drop = networks.NeuralDrop(
+        fno_model, flow_model, profile_scale=config["profile_scale"], time_scale=dt
+    )
+    ode_func = networks.FNOFluxODEWrapper(neural_drop)
+    model = networks.FNOFluxODESolver(
+        ode_func,
+        dt=1,
+        solver_type=model_config["solver"],
+        post_fn=solver_post_fn,
+    )
     return model
 
 
 def init_model(config):
-    model_config = config["model_config"]
+    # model_config = config["model_config"]
     init_fns = {
         "fno": init_fno_model,
         "node": init_node_model,
         "fno_node": init_fno_node,
         "flux_fno": init_flux_fno,
     }
-    return init_fns[config["model_type"]](model_config)
+    return init_fns[config["model_type"]](config)
 
 
 def setup_in_out_dim(config, train_loader):

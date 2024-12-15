@@ -61,8 +61,8 @@ def preprocess_profile(
     profile, temporal_pad, temporal_subsample, spatial_subsample, axis_symmetric
 ):
     """Preprocess the profile data."""
-    profile = np.array(profile, dtype="float32")
-    profile = torch.tensor(profile, dtype=torch.float32)
+    profile = np.array(profile, dtype="float64")
+    profile = torch.tensor(profile, dtype=torch.float64)
     profile, _ = utils.detrend_dataset(profile, last_n=50, window_size=50)
     profile = utils.smooth_profile(profile)
     profile = utils.pad_profile(profile, temporal_pad * temporal_subsample)
@@ -86,7 +86,7 @@ def preprocess_and_save(
     spatial_subsample=1,
     axis_symmetric=False,
     use_log_transform=True,
-    dtype=torch.float32,
+    dtype=torch.float64,
 ):
     """Preprocess all valid files in the data directory and save them in a single .pth file."""
     m_per_px = 0.00003
@@ -151,45 +151,6 @@ def preprocess_and_save(
     print(f"Preprocessed data saved to {output_file}")
 
 
-class PreprocessedDataset(Dataset):
-    def __init__(self, data, conditioning_keys, dtype=torch.float32):
-        """
-        Args:
-            data (dict): Dictionary of preprocessed data.
-            conditioning_keys (list of str): List of keys to use as conditioning variables.
-            dtype (torch.dtype): Data type for tensors.
-        """
-        self.data = data
-        self.conditioning_keys = conditioning_keys
-        self.dtype = dtype
-
-        # Create a list of (experiment_key, time_index) pairs
-        self.samples = []
-        for exp_key, exp_data in data.items():
-            num_time_steps = exp_data["profile"].shape[0]
-            for t_idx in range(num_time_steps):
-                self.samples.append((exp_key, t_idx))
-
-    def __len__(self):
-        return len(self.samples)
-
-    def __getitem__(self, idx):
-        # Get the experiment key and time index for this sample
-        exp_key, t_idx = self.samples[idx]
-        sample = self.data[exp_key]
-
-        # Extract the profile at the given time index
-        profile_at_t = sample["profile"][t_idx]  # Shape: [x]
-
-        # Extract the specified conditioning variables
-        conditioning = torch.tensor(
-            [sample[cond_key] for cond_key in self.conditioning_keys],
-            dtype=self.dtype,
-        )
-
-        return profile_at_t, conditioning
-
-
 # TODO create a base class and inherit for these to simplify
 class NODEDataset(Dataset):
     def __init__(
@@ -218,24 +179,23 @@ class NODEDataset(Dataset):
 
     def get_conditioning(self, exp_data):
         z = torch.tensor(
-            [exp_data[key] for key in self.conditioning_keys], dtype=torch.float32
+            [exp_data[key] for key in self.conditioning_keys], dtype=torch.float64
         )
         return z
 
     def _prepare_samples(self):
         samples = []
         for exp_key, exp_data in self.data.items():
-            profile = exp_data[self.profile_key]  # Shape: [time, x]
+            profile = exp_data[self.profile_key]
             profile = profile * self.profile_scale
             num_time_steps = profile.shape[0]
 
             for t in range(num_time_steps - self.traj_len):
-                h0 = profile[t]  # Shape: [x]
-                target_h = profile[
-                    t + 1 : t + 1 + self.traj_len
-                ]  # Shape: [traj_len, x]
+                h0 = profile[t]
+                target_h = profile[t + 1 : t + 1 + self.traj_len]
                 z = self.get_conditioning(exp_data)
-                t = torch.linspace(0, self.traj_len, self.traj_len)  # Adjust as needed
+                t = torch.linspace(0, self.traj_len, self.traj_len)
+                t = torch.linspace(1, self.traj_len, self.traj_len)
 
                 samples.append((t, h0, z, target_h))
 
@@ -264,7 +224,11 @@ class FNODataset(Dataset):
             profile_key (str): Key to access the profile data in each sample.
         """
         self.run_keys = run_keys
-        self.data = {k: v.to(torch.float32) for k, v in data.items() if run_keys is None or k in run_keys}
+        self.data = {
+            k: v.to(torch.float64)
+            for k, v in data.items()
+            if run_keys is None or k in run_keys
+        }
         self.conditioning_keys = conditioning_keys
         self.profile_key = profile_key
         self.profile_scale = profile_scale
@@ -272,7 +236,7 @@ class FNODataset(Dataset):
 
     def get_conditioning(self, exp_data):
         z = torch.tensor(
-            [exp_data[key] for key in self.conditioning_keys], dtype=torch.float32
+            [exp_data[key] for key in self.conditioning_keys], dtype=torch.float64
         )
         return z
 
@@ -281,7 +245,7 @@ class FNODataset(Dataset):
         for exp_key, exp_data in self.data.items():
             profile = exp_data[self.profile_key]  # Shape: [time, x]
             profile = profile * self.profile_scale
-            time_steps = exp_data["t"]  # Shape: [time]
+            time_steps = exp_data["t_lin"]  # Shape: [time]
             conditioning = self.get_conditioning(exp_data)
 
             # Create samples for each time step starting from the second time step
@@ -299,19 +263,6 @@ class FNODataset(Dataset):
 
     def __getitem__(self, idx):
         return self.samples[idx]
-
-
-def get_dataloader(
-    filename, conditioning_keys, batch_size=32, shuffle=True, dtype=torch.float32
-):
-    """
-    Create a DataLoader for the preprocessed data.
-    """
-    # Load the preprocessed data and scalers
-    data = torch.load(filename)
-    dataset = PreprocessedDataset(data, conditioning_keys, dtype=dtype)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
-    return dataloader
 
 
 def get_train_val_dataloaders(dataset, val_ratio=0.1, batch_size=16, shuffle=True):
@@ -351,7 +302,9 @@ def setup_data_from_config(config):
 
 
 if __name__ == "__main__":
-    data_dir = "data/raw_drop_data"  # Replace with the actual path to your data directory
+    data_dir = (
+        "data/raw_drop_data"  # Replace with the actual path to your data directory
+    )
     output_file = "data/drop_data.pth"
 
     preprocess_and_save(
@@ -369,19 +322,19 @@ if __name__ == "__main__":
     # p = data[1]["profile"]
     # print(torch.min(p), torch.max(p))
 
-    filename = "data/simulation_results.pth"
+    # filename = "data/simulation_results.pth"
 
-    # List of keys to use as conditioning variables
-    conditioning_keys = ["alpha", "beta", "gamma"]
-    # conditioning_keys = ["temp", "wt_per", "solute"]
+    # # List of keys to use as conditioning variables
+    # conditioning_keys = ["alpha", "beta", "gamma"]
+    # # conditioning_keys = ["temp", "wt_per", "solute"]
 
-    # Create the DataLoader
-    dataloader = get_dataloader(
-        filename, conditioning_keys, batch_size=16, shuffle=True
-    )
+    # # Create the DataLoader
+    # dataloader = get_dataloader(
+    #     filename, conditioning_keys, batch_size=16, shuffle=True
+    # )
 
-    # Iterate through the DataLoader
-    for profile, conditioning in dataloader:
-        print("Profile shape:", profile.shape)
-        print("Conditioning shape:", conditioning.shape)
-        break
+    # # Iterate through the DataLoader
+    # for profile, conditioning in dataloader:
+    #     print("Profile shape:", profile.shape)
+    #     print("Conditioning shape:", conditioning.shape)
+    #     break

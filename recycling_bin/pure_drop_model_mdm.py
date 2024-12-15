@@ -13,9 +13,7 @@ class PureDropModel:
         self.smoothing_fn = smoothing_fn
 
     def setup_grids(self):
-        r = torch.linspace(
-            -self.params.r_c, self.params.r_c, self.params.Nr
-        )
+        r = torch.linspace(-self.params.r_c, self.params.r_c, self.params.Nr)
         z = torch.linspace(0, self.params.hmax0, self.params.Nz)
         return r, z
 
@@ -163,7 +161,7 @@ def main():
     r_c = 0.000003 * 640
     maxh0 = torch.max(h_0).item() * 1.2
     print(h_0.shape, maxh0)
-    print(0.000003*220)
+    print(0.000003 * 220)
     print(r_c)
 
     # TODO consider doing something different with these
@@ -172,21 +170,20 @@ def main():
         hmax0=0.8e-3,  # Initial droplet height at the center in meters
         Nr=256,  # Number of radial points
         Nz=110,  # Number of z-axis points
-        dr= 2 * r_c / (256 - 1),  # Radial grid spacing
+        dr=2 * r_c / (256 - 1),  # Radial grid spacing
         dz=maxh0 / (110 - 1),  # Vertical grid spacing
         rho=1,  # Density of the liquid (kg/m^3) eg 1
         sigma=0.072,  # Surface tension (N/m) eg 0.072
         eta=1e-3,  # Viscosity (Pa*s) eg 1e-3
-
-        A = 8.07131, # Antoine Equation (-)
-        B = 1730.63, # Antoine Equation (-)
-        C = 233.4, # Antoine Equation (-)
-        D = 2.42e-5, # Diffusivity of H2O in Air (m^2/s)
-        Mw = 0.018, # Molecular weight H2O vapor (kg/mol)
-        #Rs = 8.314, # Gas Constant (J/(K*mol))
-        Rs = 461.5, # Gas Constant (J/(K*kg))
-        T = 293.15, # Ambient Temperature (K)
-        RH = 0.50, # Relative Humidity (-)
+        A=8.07131,  # Antoine Equation (-)
+        B=1730.63,  # Antoine Equation (-)
+        C=233.4,  # Antoine Equation (-)
+        D=2.42e-5,  # Diffusivity of H2O in Air (m^2/s)
+        Mw=0.018,  # Molecular weight H2O vapor (kg/mol)
+        # Rs = 8.314, # Gas Constant (J/(K*mol))
+        Rs=461.5,  # Gas Constant (J/(K*kg))
+        T=293.15,  # Ambient Temperature (K)
+        RH=0.50,  # Relative Humidity (-)
     )
     # params = utils.SimulationParams(
     #     r_c=r_c,  # Radius of the droplet in meters
@@ -213,8 +210,12 @@ def main():
     Nt = 1000
     dt = 1e-4
     t_lin = torch.linspace(0, dt * Nt, Nt)
-    
-    drop_model = PureDropModel(params, evap_model=evap_models.deegan_evap_model, smoothing_fn=utils.smoothing_fn)
+
+    drop_model = PureDropModel(
+        params,
+        evap_model=evap_models.deegan_evap_model,
+        smoothing_fn=utils.smoothing_fn,
+    )
 
     h_0 = utils.setup_parabolic_initial_h_profile(
         drop_model.r, 0.8 * params.hmax0, params.r_c, order=4
@@ -231,8 +232,8 @@ def main():
     drop_viz.flow_viz(drop_model, h_0, 0, 0)
 
     def post_fn(h):
-        h = torch.clamp(h, min=0) # ensure non-negative height
-        h = utils.drop_polynomial_fit(h, 8) # project height on polynomial basis
+        h = torch.clamp(h, min=0)  # ensure non-negative height
+        h = utils.drop_polynomial_fit(h, 8)  # project height on polynomial basis
         return h
 
     h_history = utils.run_forward_euler_simulation(drop_model, h_0, t_lin, post_fn)
