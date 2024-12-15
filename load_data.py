@@ -150,6 +150,7 @@ def preprocess_and_save(
     torch.save(preprocessed_data, output_file)
     print(f"Preprocessed data saved to {output_file}")
 
+
 # TODO create a base class and inherit for these to simplify
 class NODEDataset(Dataset):
     def __init__(
@@ -191,9 +192,7 @@ class NODEDataset(Dataset):
 
             for t in range(num_time_steps - self.traj_len):
                 h0 = profile[t]
-                target_h = profile[
-                    t + 1 : t + 1 + self.traj_len
-                ]
+                target_h = profile[t + 1 : t + 1 + self.traj_len]
                 z = self.get_conditioning(exp_data)
                 t = torch.linspace(0, self.traj_len, self.traj_len)
                 t = torch.linspace(1, self.traj_len, self.traj_len)
@@ -225,7 +224,11 @@ class FNODataset(Dataset):
             profile_key (str): Key to access the profile data in each sample.
         """
         self.run_keys = run_keys
-        self.data = {k: v.to(torch.float64) for k, v in data.items() if run_keys is None or k in run_keys}
+        self.data = {
+            k: v.to(torch.float64)
+            for k, v in data.items()
+            if run_keys is None or k in run_keys
+        }
         self.conditioning_keys = conditioning_keys
         self.profile_key = profile_key
         self.profile_scale = profile_scale
@@ -299,7 +302,9 @@ def setup_data_from_config(config):
 
 
 if __name__ == "__main__":
-    data_dir = "data/raw_drop_data"  # Replace with the actual path to your data directory
+    data_dir = (
+        "data/raw_drop_data"  # Replace with the actual path to your data directory
+    )
     output_file = "data/drop_data.pth"
 
     preprocess_and_save(

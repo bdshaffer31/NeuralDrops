@@ -1,11 +1,11 @@
 {
-    "run_dir": "test_fno_axis_symmetric",
+    "run_dir": "fno_flux_deegan",
     "manual_seed": 42,
-    "num_epochs": 6,
+    "num_epochs": 4,
     "traj_len": 8,
     "lr": 0.01,
     "model_type": "flux_fno",
-    "data_file": "data/simulation_results.pth",
+    "data_file": "data/simulation_results_deegan.pth",
     "batch_size": 16,
     "val_ratio": 0.1,
     "run_keys": [

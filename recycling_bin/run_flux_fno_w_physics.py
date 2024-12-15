@@ -21,8 +21,12 @@ def validate_node_model(model, time_steps, val_loader, loss_fn):
     with torch.no_grad():
         for t, x_0, z, y in val_loader:
             evap_pred = model(x_0, z, t[0]).transpose(0, 1)
-            drop_model = pure_drop_model.PureDropModel(params, evap_model=evap_pred, smoothing_fn=utils_drop.smoothing_fn)
-            y_pred = utils_drop.run_forward_euler_simulation(drop_model, h_0, t_lin, post_fn)
+            drop_model = pure_drop_model.PureDropModel(
+                params, evap_model=evap_pred, smoothing_fn=utils_drop.smoothing_fn
+            )
+            y_pred = utils_drop.run_forward_euler_simulation(
+                drop_model, h_0, t_lin, post_fn
+            )
             loss = loss_fn(y_pred, y)
             val_loss += loss.item()
 
@@ -48,15 +52,18 @@ def train_node(
             optimizer.zero_grad()
 
             evap_pred = model(x_0, z, t[0]).transpose(0, 1)
-            drop_model = pure_drop_model.PureDropModel(params, evap_model=evap_pred, smoothing_fn=utils_drop.smoothing_fn)
+            drop_model = pure_drop_model.PureDropModel(
+                params, evap_model=evap_pred, smoothing_fn=utils_drop.smoothing_fn
+            )
 
-            
             def post_fn(h):
                 h = torch.clamp(h, min=0)
                 h = utils.drop_polynomial_fit(h, 8)
                 return h
 
-            pred_y_traj = utils_drop.run_forward_euler_simulation(drop_model, x_0, t[1], post_fn)
+            pred_y_traj = utils_drop.run_forward_euler_simulation(
+                drop_model, x_0, t[1], post_fn
+            )
 
             loss = loss_fn(pred_y_traj, y_traj)
             loss.backward()

@@ -114,8 +114,8 @@ def plot_velocity(drop_model, h, center_mask=6, corner_mask=3):
     u_grid = drop_model.calc_u_velocity(h)
     w_grid = drop_model.calc_w_velocity(h, u_grid)
 
-    #u_grid[u_grid == 0.0] = torch.nan
-    #w_grid[w_grid == 0.0] = torch.nan
+    # u_grid[u_grid == 0.0] = torch.nan
+    # w_grid[w_grid == 0.0] = torch.nan
     u_grid = set_nans_in_center(u_grid, center_mask)
     u_grid = set_nans_in_corners(u_grid, corner_mask)
     w_grid = set_nans_in_center(w_grid, center_mask)
