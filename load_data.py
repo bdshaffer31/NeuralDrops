@@ -8,6 +8,7 @@ from torch.utils.data import random_split, DataLoader
 import torch
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
+from drop_model import utils as drop_utils
 
 
 class LabelCoder:
@@ -120,7 +121,7 @@ def preprocess_and_save(
         print(file)
         data = load_data(os.path.join(data_dir, file))
         raw_profile = data["profile"]
-        t_lin = torch.arange(raw_profile.shape[0] + temporal_pad) / 20
+        t_lin = torch.arange(raw_profile.shape[0] + temporal_pad*temporal_subsample) / 20
         r_lin = torch.arange(raw_profile.shape[1]) * m_per_px
         z_lin = torch.arange(h_max) * m_per_px
         raw_profile = raw_profile * m_per_px
@@ -131,9 +132,18 @@ def preprocess_and_save(
             spatial_subsample,
             axis_symmetric,
         )
+
         t_lin = t_lin[::temporal_subsample]
         r_lin = r_lin[spatial_subsample // 2 :: spatial_subsample]
         z_lin = z_lin[::spatial_subsample]
+
+        # ensure even dimension
+        if profile.shape[1] % 2 == 1: # need an odd number of values for non zero r point ... 
+            # sort of janky, just drop the first value
+            profile = profile[:,1:]
+            r_lin = r_lin[1:]
+        # force symmetric, this should be moved to process but needs to hapenn after force even
+        profile = drop_utils.symmetrize(profile)
 
         preprocessed_data[run_num] = {
             "profile": profile,
@@ -305,11 +315,11 @@ if __name__ == "__main__":
     data_dir = (
         "data/raw_drop_data"  # Replace with the actual path to your data directory
     )
-    output_file = "data/drop_data.pth"
+    output_file = "data/drop_data_10.pth"
 
     preprocess_and_save(
         data_dir=data_dir,
-        run_nums=utils.good_run_numbers(),
+        run_nums=utils.good_run_numbers()[:10],
         output_file=output_file,
         temporal_pad=128,
         temporal_subsample=12,
