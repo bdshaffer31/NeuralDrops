@@ -138,7 +138,7 @@ def main():
     # TODO consider doing something different with these
     params = utils.SimulationParams(
         r_grid=1.0e-3,  # Radius of the droplet in meters
-        hmax0=10e-4,  # Initial droplet height at the center in meters
+        hmax0=5e-4,  # Initial droplet height at the center in meters
         Nr=640,  # Number of radial points
         Nz=110,  # Number of z-axis points
         dr=2 * 1.0e-3 / (256 - 1),  # Radial grid spacing

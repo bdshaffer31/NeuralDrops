@@ -65,7 +65,7 @@ def deegan_evap_model(evap_params, params, r, h):
 
     dh_dr = grad(h, params.dr)
     w_e = -m_dot / params.rho * torch.sqrt(1 + torch.square(dh_dr))
-    return w_e - 1.0e-6
+    return w_e - 1.0e-7
 
 
 def diddens_evap_model(params, r, h):

@@ -331,12 +331,16 @@ def flow_viz_w_evap(drop_model, h, center_mask=8, corner_mask=4, log_mag=False):
     def get_normals(r_in, h_in, m_dot, length=1):
         dr = torch.zeros_like(h_in)
         dh = torch.zeros_like(h_in)
-        for idx in range(0, len(r_in)-1, 10):
-            x0, y0, xa, ya = r_in[idx], h_in[idx], r_in[idx+1], h_in[idx+1]
-            dx, dy = xa-x0, ya-y0
-            norm = math.hypot(dx, dy) * 1/length * m_dot[idx] / max(m_dot)
-            dx /= norm
-            dy /= norm
+        for idx in range(0, len(r_in)-1, 1):
+            if h[idx]>1e-8:
+                x0, y0, xa, ya = r_in[idx], h_in[idx], r_in[idx+1], h_in[idx+1]
+                dx, dy = xa-x0, ya-y0
+                norm = math.hypot(dx, dy) * 1/length * m_dot[idx] / max(m_dot)
+                dx /= norm
+                dy /= norm
+            else:
+                dx = torch.nan
+                dy = torch.nan
 
             dr[idx] = dx
             dh[idx] = dy
@@ -345,29 +349,17 @@ def flow_viz_w_evap(drop_model, h, center_mask=8, corner_mask=4, log_mag=False):
         return dr, dh
     dx, dy = get_normals(drop_model.r, h, m_dot)
     
-    # Calculating the gradient
-    L=10 # gradient length
-    grad_temp = torch.ones(2, drop_model.r.shape[0])
-    grad_temp[0, :] = -2*drop_model.r
-    grad_temp /= torch.linalg.norm(grad_temp, axis=0)  # normalizing to unit vector
-    nx = torch.vstack((drop_model.r - L/2 * grad_temp[0], drop_model.r + L/2 * grad_temp[0]))
-    ny = torch.vstack((h - L/2 * grad_temp[1], h + L/2 * grad_temp[1]))
-    
     quiver_step = 2
     r_down = drop_model.r[::quiver_step]
     h_down = h[::quiver_step]
     dx_down = dx[::quiver_step]
     dy_down = dy[::quiver_step]
-    nx_down = nx[:, ::quiver_step]
-    ny_down = ny[:, ::quiver_step]
 
     plt.quiver(
         r_down,
         h_down,
         r_down - dy_down,
         h_down + dx_down,
-        #nx_down[1,:],
-        #ny_down[1,:],
         color="black",
         scale=50,
         width=0.003,
