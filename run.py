@@ -47,11 +47,18 @@ def train(
         if model_type in ["node", "fno_node", "flux_fno"]:
             for t, x_0, z, y_traj in train_loader:
                 # print("t", t.shape, torch.min(t), torch.max(t))
-                # print("x_0", x_0.shape, torch.min(x_0), torch.max(x_0))
+                #print("x_0", x_0.shape, torch.min(x_0), torch.max(x_0))
                 # print("z", z.shape, torch.min(z), torch.max(z))
-                # print("y_traj", y_traj.shape, torch.min(y_traj), torch.max(y_traj))
+                #print("y_traj", y_traj.shape, torch.min(y_traj), torch.max(y_traj))
                 optimizer.zero_grad()
                 pred_y_traj = model(x_0, z, t[0]).transpose(0, 1)
+                #with torch.no_grad():
+                #    import matplotlib.pyplot as plt
+                #    plt.plot(x_0[0, :], label="x_0")
+                #    plt.plot(pred_y_traj[0, 10, :], label="y_traj")
+                #    #plt.plot(evap_term[0], label="e")
+                #    plt.legend()
+                #    plt.show()
                 loss = loss_fn(pred_y_traj, y_traj)
                 loss.backward()
                 optimizer.step()

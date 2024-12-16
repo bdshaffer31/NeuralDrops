@@ -266,7 +266,7 @@ class FNOFluxODEWrapper(nn.Module):
         evap_term = self.evap_model(h.to(torch.float32), self.conditioning)
         # print("e", evap_term.shape, torch.min(evap_term), torch.max(evap_term))
 
-        # with torch.no_grad():
+        #with torch.no_grad():
         #     import matplotlib.pyplot as plt
         #     plt.plot(h[0], label="h")
         #     plt.plot(flow_term[0], label="f")
@@ -281,7 +281,7 @@ class FNOFluxODEWrapper(nn.Module):
 
 
 class FNOFluxODESolver(nn.Module):
-    def __init__(self, ode_func, solver_type="rk4"):
+    def __init__(self, ode_func,time_step=1, solver_type="rk4"):
         super(FNOFluxODESolver, self).__init__()
         self.ode_func = ode_func
         self.solver_type = solver_type
