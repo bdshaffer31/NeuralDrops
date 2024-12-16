@@ -30,11 +30,11 @@ class PureDropModel:
         return curvature_term
 
     # Pressure calculation
-    def calc_pressure(self, h):
+    def calc_pressure(self, h, dis_press=0.0):
         curvature_term = self.calc_curvature(h)
         d_curvature_dr = self.grad(curvature_term, self.params.dr)
         pressure = -self.params.sigma * self.safe_inv(self.r, 0.0) * d_curvature_dr
-        return pressure
+        return pressure + dis_press
 
     # u velocity calculation
     def calc_u_velocity(self, h):
@@ -137,12 +137,12 @@ def main():
 
     # TODO consider doing something different with these
     params = utils.SimulationParams(
-        r_grid=1.0e-3,  # Radius of the droplet in meters
-        hmax0=5e-4,  # Initial droplet height at the center in meters
+        r_grid=1.28e-3,  # Radius of the droplet in meters
+        hmax0=4.4e-4,  # Initial droplet height at the center in meters
         Nr=640,  # Number of radial points
-        Nz=110,  # Number of z-axis points
-        dr=2 * 1.0e-3 / (256 - 1),  # Radial grid spacing
-        dz=5e-4 / (110 - 1),  # Vertical grid spacing
+        Nz=220,  # Number of z-axis points
+        dr=2 * 1.28e-3 / (640 - 1),  # Radial grid spacing
+        dz=4.4e-4 / (220 - 1),  # Vertical grid spacing
         rho=1,  # Density of the liquid (kg/m^3) eg 1
         sigma=0.072,  # Surface tension (N/m) eg 0.072
         eta=1e-3,  # Viscosity (Pa*s) eg 1e-5
@@ -156,11 +156,11 @@ def main():
         # Rs = 8.314, # Gas Constant (J/(K*mol))
         Rs=461.5,  # Gas Constant (J/(K*kg))
         T=293.15,  # Ambient Temperature (K)
-        RH=0.20,  # Relative Humidity (-)
+        RH=0.30,  # Relative Humidity (-)
     )
 
-    Nt = 100
-    dt = 1e-2
+    Nt = 16000
+    dt = 2e-3
     t_lin = torch.linspace(0, dt * Nt, Nt)
 
     def smoothing_fn(x):
@@ -171,15 +171,15 @@ def main():
         params, evap_params=evap_params, evap_model=evap_models.deegan_evap_model, smoothing_fn=smoothing_fn
     )
 
-    r_c = 0.5 * params.r_grid
+    r_c = 0.9 * params.r_grid
 
-    h_0 = utils.setup_polynomial_initial_h_profile(
-        drop_model.r, 0.8 * params.hmax0, r_c, order=4
+    #h_0 = utils.setup_polynomial_initial_h_profile(
+    #    drop_model.r, 0.8 * params.hmax0, r_c, order=4
+    #)
+    h_0 = utils.setup_cap_initial_h_profile(drop_model.r, 0.8 * params.hmax0, r_c
     )
-    # h_0 = utils.setup_cap_initial_h_profile(drop_model.r, 0.8 * params.hmax0, r_c
-    # )
 
-    #drop_viz.flow_viz(drop_model, h_0, 0, 0)
+    drop_viz.flow_viz(drop_model, h_0, 0, 0)
 
     def post_fn(h):
         h = torch.clamp(h, min=0)  # ensure non-negative height
@@ -187,15 +187,19 @@ def main():
         return h
 
     h_history = utils.run_forward_euler_simulation(drop_model, h_0, t_lin, post_fn)
-    #drop_viz.plot_height_profile_evolution(drop_model.r, h_history, params)
-
-    # drop_viz.inspect(drop_model, h_history[-1].clone())
-    #drop_viz.plot_velocity(drop_model, h_history[-1].clone())
+    
+    drop_viz.plot_height_profile_evolution(drop_model.r, h_history, params)
     # drop_viz.inspect(drop_model, h_history[0].clone())
-    # drop_viz.plot_velocity(drop_model, h_history[0].clone(), 0, 0)
+    # drop_viz.inspect(drop_model, h_history[-1].clone())
+    #drop_viz.plot_velocity(drop_model, h_history[0].clone(), 0, 0)
+    #drop_viz.plot_velocity(drop_model, h_history[-1].clone(), 0, 0)
     #drop_viz.flow_viz(drop_model, h_history[-1].clone(), 0, 0)
-    drop_viz.flow_viz_w_evap(drop_model, h_history[-1].clone(), 0, 0)
     # drop_viz.flow_viz(drop_model, h_history[-1].clone())
+    drop_viz.flow_viz_w_evap(drop_model, h_history[0].clone(), 0, 0)
+    drop_viz.flow_viz_w_evap(drop_model, h_history[14000].clone(), 0, 0)
+    drop_viz.flow_viz_w_evap(drop_model, h_history[14500].clone(), 0, 0)
+    drop_viz.flow_viz_w_evap(drop_model, h_history[15000].clone(), 0, 0)
+    drop_viz.flow_viz_w_evap(drop_model, h_history[-1].clone(), 0, 0)
 
 
 if __name__ == "__main__":

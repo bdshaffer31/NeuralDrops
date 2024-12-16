@@ -214,7 +214,7 @@ def flow_viz(drop_model, h, center_mask=8, corner_mask=4, log_mag=False):
     R, Z = torch.meshgrid(drop_model.r, drop_model.z, indexing="ij")
 
     # Downsample for quiver plot (to avoid too many arrows)
-    quiver_step = 6  # Adjust this for clarity
+    quiver_step = 12  # Adjust this for clarity
     R_down = R[::quiver_step, ::quiver_step]
     Z_down = Z[::quiver_step, ::quiver_step]
     U_down = u_grid[::quiver_step, ::quiver_step]
@@ -290,7 +290,7 @@ def flow_viz_w_evap(drop_model, h, center_mask=8, corner_mask=4, log_mag=False):
     R, Z = torch.meshgrid(drop_model.r, drop_model.z, indexing="ij")
 
     # Downsample for quiver plot (to avoid too many arrows)
-    quiver_step = 6  # Adjust this for clarity
+    quiver_step = 12  # Adjust this for clarity
     R_down = R[::quiver_step, ::quiver_step]
     Z_down = Z[::quiver_step, ::quiver_step]
     U_down = u_grid[::quiver_step, ::quiver_step]
@@ -332,12 +332,14 @@ def flow_viz_w_evap(drop_model, h, center_mask=8, corner_mask=4, log_mag=False):
         dr = torch.zeros_like(h_in)
         dh = torch.zeros_like(h_in)
         for idx in range(0, len(r_in)-1, 1):
-            if h[idx]>1e-8:
+            if h[idx]>0.0:
                 x0, y0, xa, ya = r_in[idx], h_in[idx], r_in[idx+1], h_in[idx+1]
                 dx, dy = xa-x0, ya-y0
-                norm = math.hypot(dx, dy) * 1/length * m_dot[idx] / max(m_dot)
+                norm = math.hypot(dx, dy) * 1/length 
                 dx /= norm
                 dy /= norm
+                dx *= m_dot[idx] / max(m_dot)
+                dy *= m_dot[idx] / max(m_dot)
             else:
                 dx = torch.nan
                 dy = torch.nan
@@ -349,7 +351,7 @@ def flow_viz_w_evap(drop_model, h, center_mask=8, corner_mask=4, log_mag=False):
         return dr, dh
     dx, dy = get_normals(drop_model.r, h, m_dot)
     
-    quiver_step = 2
+    quiver_step = 3
     r_down = drop_model.r[::quiver_step]
     h_down = h[::quiver_step]
     dx_down = dx[::quiver_step]
@@ -361,7 +363,7 @@ def flow_viz_w_evap(drop_model, h, center_mask=8, corner_mask=4, log_mag=False):
         r_down - dy_down,
         h_down + dx_down,
         color="black",
-        scale=50,
+        scale=5,
         width=0.003,
         headwidth=3,  # scale=100_000
     )

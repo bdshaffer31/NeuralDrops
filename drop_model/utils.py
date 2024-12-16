@@ -41,7 +41,7 @@ def setup_polynomial_initial_h_profile(r, h0, r_c, drop_fraction=1.0, order=2):
 
 def setup_cap_initial_h_profile(r_cap, h0, r_c):
     h = torch.zeros_like(r_cap)
-    num_c = list(map(lambda i: i > -r_c, r_cap)).index(True) + 1
+    num_c = list(map(lambda i: i >= -r_c, r_cap)).index(True) + 1
     # setup a spherical cap initial height profile
     R = (r_c**2 + h0**2) / (2 * h0)
     # theta = torch.arccos(torch.tensor([1 - h0 * R]))
