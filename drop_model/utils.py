@@ -145,7 +145,8 @@ def drop_polynomial_fit(h_0, degree=3):
     # Construct the Vandermonde matrix
     powers = torch.arange(degree + 1, dtype=torch.float64)
     A = x_nonzero.unsqueeze(1) ** powers
-    A = A.to(torch.float32)
+    #A = A.to(torch.float32)
+    A = A.to(torch.float64)
     coeffs, *_ = torch.linalg.lstsq(A, h_0_nonzero.unsqueeze(1))
     h_0_fitted = (A @ coeffs).squeeze(1)
 

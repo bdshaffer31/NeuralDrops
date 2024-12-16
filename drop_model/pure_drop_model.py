@@ -2,12 +2,13 @@ import torch
 
 
 class PureDropModel:
-    def __init__(self, params, evap_model=None, smoothing_fn=None):
+    def __init__(self, params, evap_params=None, evap_model=None, smoothing_fn=None):
         # Initialize with a height profile and a params object
         self.params = params
         self.r, self.z = self.setup_grids()
         self.evap_model = evap_model
         self.smoothing_fn = smoothing_fn
+        self.evap_params = evap_params
 
     def setup_grids(self):
         r = torch.linspace(-self.params.r_grid, self.params.r_grid, self.params.Nr)
@@ -119,7 +120,7 @@ class PureDropModel:
     def calc_evap_dh_dt(self, h):
         if self.evap_model is None:
             return torch.zeros_like(h)
-        return self.evap_model(self.params, self.r, h)
+        return self.evap_model(self.evap_params, self.params, self.r, h)
 
     # Total dh/dt calculation
     def calc_dh_dt(self, h):
@@ -137,7 +138,7 @@ def main():
     # TODO consider doing something different with these
     params = utils.SimulationParams(
         r_grid=1.0e-3,  # Radius of the droplet in meters
-        hmax0=5e-4,  # Initial droplet height at the center in meters
+        hmax0=10e-4,  # Initial droplet height at the center in meters
         Nr=640,  # Number of radial points
         Nz=110,  # Number of z-axis points
         dr=2 * 1.0e-3 / (256 - 1),  # Radial grid spacing
@@ -167,7 +168,7 @@ def main():
 
     # Working Evap Choices: [no_evap_model, constant_evap_model, deegan_evap_model]
     drop_model = PureDropModel(
-        params, evap_model=evap_models.deegan_evap_model, smoothing_fn=smoothing_fn
+        params, evap_params=evap_params, evap_model=evap_models.deegan_evap_model, smoothing_fn=smoothing_fn
     )
 
     r_c = 0.5 * params.r_grid
@@ -178,7 +179,7 @@ def main():
     # h_0 = utils.setup_cap_initial_h_profile(drop_model.r, 0.8 * params.hmax0, r_c
     # )
 
-    drop_viz.flow_viz(drop_model, h_0, 0, 0)
+    #drop_viz.flow_viz(drop_model, h_0, 0, 0)
 
     def post_fn(h):
         h = torch.clamp(h, min=0)  # ensure non-negative height
@@ -186,13 +187,14 @@ def main():
         return h
 
     h_history = utils.run_forward_euler_simulation(drop_model, h_0, t_lin, post_fn)
-    drop_viz.plot_height_profile_evolution(drop_model.r, h_history, params)
+    #drop_viz.plot_height_profile_evolution(drop_model.r, h_history, params)
 
     # drop_viz.inspect(drop_model, h_history[-1].clone())
-    drop_viz.plot_velocity(drop_model, h_history[-1].clone())
+    #drop_viz.plot_velocity(drop_model, h_history[-1].clone())
     # drop_viz.inspect(drop_model, h_history[0].clone())
     # drop_viz.plot_velocity(drop_model, h_history[0].clone(), 0, 0)
-    drop_viz.flow_viz(drop_model, h_history[-1].clone(), 0, 0)
+    #drop_viz.flow_viz(drop_model, h_history[-1].clone(), 0, 0)
+    drop_viz.flow_viz_w_evap(drop_model, h_history[-1].clone(), 0, 0)
     # drop_viz.flow_viz(drop_model, h_history[-1].clone())
 
 
