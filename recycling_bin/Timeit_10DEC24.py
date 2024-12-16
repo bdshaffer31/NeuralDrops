@@ -9,6 +9,7 @@ import torch
 
 import time
 
+
 @dataclass
 class FieldVariables:
     u_grid: torch.tensor  # Radial velocity grid
@@ -38,47 +39,48 @@ class SimulationParams:
     eta: float  # Viscosity (Pa*s)
     d_sigma_dr: float  # Surface tension gradient
 
-    
     # Antoine's Equation
-    A: float  
+    A: float
     B: float
     C: float
 
-    D: float #Diffusvity of Vapor
-    Mw: float #Molecular weight of Vapor
+    D: float  # Diffusvity of Vapor
+    Mw: float  # Molecular weight of Vapor
 
-    Rs: float #Gas Constant
-    T: float #Temperature of drop exterior
-    RH: float #Relative Humidity
+    Rs: float  # Gas Constant
+    T: float  # Temperature of drop exterior
+    RH: float  # Relative Humidity
+
 
 def setup_grids(params: SimulationParams):
     """Set up the grid arrays and initial field values."""
     # Radial and vertical grids
     r = torch.linspace(-params.r_c, params.r_c, params.Nr + 1)  # r grid (avoiding r=0)
-    z = torch.linspace(0, 1.2*params.hmax0, params.Nz + 1)  # z grid
+    z = torch.linspace(0, 1.2 * params.hmax0, params.Nz + 1)  # z grid
 
     # Initialize field arrays
     field_vars = FieldVariables(
-        u_grid=torch.zeros(params.Nr  + 1 , params.Nz  + 1),  # r velocity
-        w_grid=torch.zeros(params.Nr  + 1, params.Nz  + 1),  # z velocity
-        p_grid=torch.zeros(params.Nr  + 1),  # pressure
-        eta_grid=params.eta * torch.ones(params.Nr  + 1, params.Nz  + 1),  # constant viscosity
-        sigma_grid=params.sigma * torch.ones(params.Nr  + 1),  # constant surface tension
-        rho_grid=params.rho * torch.ones(params.Nr  + 1, params.Nz  + 1),  # density
-        diff_grid=params.rho * torch.ones(params.Nr  + 1, params.Nz  + 1),  # diffusivity
-
-        m_dot_grid=torch.zeros(params.Nr  + 1),  # mass loss
+        u_grid=torch.zeros(params.Nr + 1, params.Nz + 1),  # r velocity
+        w_grid=torch.zeros(params.Nr + 1, params.Nz + 1),  # z velocity
+        p_grid=torch.zeros(params.Nr + 1),  # pressure
+        eta_grid=params.eta
+        * torch.ones(params.Nr + 1, params.Nz + 1),  # constant viscosity
+        sigma_grid=params.sigma * torch.ones(params.Nr + 1),  # constant surface tension
+        rho_grid=params.rho * torch.ones(params.Nr + 1, params.Nz + 1),  # density
+        diff_grid=params.rho * torch.ones(params.Nr + 1, params.Nz + 1),  # diffusivity
+        m_dot_grid=torch.zeros(params.Nr + 1),  # mass loss
     )
 
     return r, z, field_vars
 
-def setup_cap_initial_h_profile(r, h0, r_c):
 
+def setup_cap_initial_h_profile(r, h0, r_c):
     # setup a spherical cap initial height profile
     R = (np.square(r_c) + np.square(h0)) / (2 * h0)
     theta = np.arccos(1 - h0 * R)
     h = torch.sqrt((2.0 * R * (r + R) - torch.square(r + R))) - (R - h0)
     return h
+
 
 def setup_parabolic_initial_h_profile(r, h0, r_c, drop_fraction=1.0, order=4):
     # setup up a polynomial initial drop profile
@@ -90,40 +92,56 @@ def setup_parabolic_initial_h_profile(r, h0, r_c, drop_fraction=1.0, order=4):
     )
     return h
 
+
 def grad(x, dx):
-    return torch.gradient(x, spacing = [dx], edge_order=2)
+    return torch.gradient(x, spacing=[dx], edge_order=2)
+
 
 def calc_curvature(params, r, z, field_vars, h):
-    dh_dr, = grad(h, params.dr)
+    (dh_dr,) = grad(h, params.dr)
     curvature_term = (r * dh_dr) / torch.sqrt(1 + torch.square(dh_dr))
     return curvature_term
+
 
 def calc_pressure(params, r, z, field_vars, h):
     """Compute the radial pressure gradient using the nonlinear curvature formula."""
     # using Diddens implementation
     # note, square root should be approximated as unity in the limit h -> 0
     curvature_term = calc_curvature(params, r, z, field_vars, h)
-    d_curvature_dr, = grad(curvature_term, params.dr)
+    (d_curvature_dr,) = grad(curvature_term, params.dr)
     Laplace_pressure = -params.sigma * (1 / r) * d_curvature_dr
 
-    h_star = params.hmax0/90
+    h_star = params.hmax0 / 90
     n = 3
     m = 2
-    theta_e = 2*np.arctan(params.hmax0/params.r_c)
-    dis_press = -params.sigma*np.square(theta_e)*(n-1)*(m-1)/(n-m)/(2*h_star)*(np.power(h_star/params.hmax0, n)-np.power(h_star/params.hmax0, m))
+    theta_e = 2 * np.arctan(params.hmax0 / params.r_c)
+    dis_press = (
+        -params.sigma
+        * np.square(theta_e)
+        * (n - 1)
+        * (m - 1)
+        / (n - m)
+        / (2 * h_star)
+        * (np.power(h_star / params.hmax0, n) - np.power(h_star / params.hmax0, m))
+    )
     return Laplace_pressure + dis_press
 
+
 def calc_curvature_v2(params, r, z, field_vars, h):
-    dh_dr, = grad(h, params.dr)
-    d2h_dr2, = grad(dh_dr, params.dr)
-    curvature_term = torch.abs(d2h_dr2) / torch.pow(torch.sqrt(1 + torch.square(dh_dr)),3)
+    (dh_dr,) = grad(h, params.dr)
+    (d2h_dr2,) = grad(dh_dr, params.dr)
+    curvature_term = torch.abs(d2h_dr2) / torch.pow(
+        torch.sqrt(1 + torch.square(dh_dr)), 3
+    )
     return curvature_term
+
 
 def calc_pressure_v2(params, r, z, field_vars, h):
     """Compute the radial pressure gradient using the nonlinear curvature formula."""
     curvature_term = calc_curvature_v2(params, r, z, field_vars, h)
     pressure = curvature_term * params.sigma * 2
     return pressure
+
 
 def interp_h_mask_grid(grid_data, h, z):
     dz = z[1] - z[0]
@@ -141,11 +159,12 @@ def interp_h_mask_grid(grid_data, h, z):
             masked_grid[i, :] = 0
     return masked_grid
 
+
 def compute_u_velocity(params, r, z, field_vars, h):
     """Compute radial velocity u(r, z, t) using the given equation."""
     u_grid = torch.zeros_like(field_vars.u_grid)
     pressure = calc_pressure(params, r, z, field_vars, h)
-    dp_dr, = grad(pressure, params.dr)
+    (dp_dr,) = grad(pressure, params.dr)
     for i in range(len(r)):
         h_r = h[i]
         for j, z_val in enumerate(z):
@@ -154,11 +173,12 @@ def compute_u_velocity(params, r, z, field_vars, h):
     u_grid = interp_h_mask_grid(u_grid, h, z)
     return u_grid
 
+
 def vectorize_compute_u_velocity(params, r, z, field_vars, h):
     """Compute radial velocity u(r, z, t) using the given equation."""
     u_grid = torch.zeros_like(field_vars.u_grid)
     pressure = calc_pressure(params, r, z, field_vars, h)
-    dp_dr, = grad(pressure, params.dr)
+    (dp_dr,) = grad(pressure, params.dr)
 
     def int_z(h, dp_dr):
         for j, z_val in enumerate(z):
@@ -169,6 +189,7 @@ def vectorize_compute_u_velocity(params, r, z, field_vars, h):
     u_grid = torch.func.vmap(int_z)(h, dp_dr)
     u_grid = interp_h_mask_grid(u_grid, h, z)
     return u_grid
+
 
 def compute_w_velocity(params, r, z, field_vars, h):
     w_grid = torch.zeros_like(field_vars.w_grid)
@@ -181,42 +202,46 @@ def compute_w_velocity(params, r, z, field_vars, h):
     w_grid[0, :] = w_grid[1, :]  # hack to deal with numerical issues at r ~ 0
     return w_grid
 
+
 def mass_loss_tracked_r_c(params, r, h):
+    def mass_loss(params, r_in, theta, R_c):
+        p_sat = 10 ** (
+            params.A - params.B / (params.C + params.T - 273.15)
+        )  # Antoine's Equation
+        p_sat = p_sat / 760.0 * 101325.0  # conversion (mmHg) to (Pa)
+        # print(p_sat)
 
-    def mass_loss (params, r_in, theta, R_c):
-        p_sat = 10**(params.A-params.B/(params.C+params.T-273.15)) #Antoine's Equation
-        p_sat = p_sat/760.0*101325.0 # conversion (mmHg) to (Pa)
-        #print(p_sat)
+        # R_c = params.r_c #TODO
+        b_c = 1.0  # TODO
+        J_delta = 0  # Contribution from nonhomogenous surface concentration (multi-phase drops)
 
-        #R_c = params.r_c #TODO
-        b_c = 1.0 #TODO
-        J_delta = 0 #Contribution from nonhomogenous surface concentration (multi-phase drops)
+        lam = -(np.pi - 2.0 * theta) / (2.0 * np.pi - 2.0 * theta)
+        J_c = torch.pow(1 - torch.square(r_in / R_c), lam)
 
-        lam = -(np.pi-2.0*theta)/(2.0*np.pi-2.0*theta)
-        J_c = torch.pow(1-torch.square(r_in/R_c),lam)
+        J_c[-1] = J_c[-2]
+        J_c[0] = J_c[1]
 
-        J_c[-1]=J_c[-2]
-        J_c[0]=J_c[1]
+        J_term = (b_c - params.RH) * J_c + J_delta
 
-        J_term = (b_c - params.RH)*J_c + J_delta
-
-        m_dot = params.D*params.Mw*p_sat/(params.Rs*params.T*R_c)*J_term
+        m_dot = params.D * params.Mw * p_sat / (params.Rs * params.T * R_c) * J_term
         return m_dot
-    
+
     h_max_current = torch.max(h)
     num_c = list(map(lambda i: i > 0.01 * params.hmax0, h)).index(True)
-    r_c_current = - r[num_c]
-    theta_current = 2*torch.arctan(h_max_current/r_c_current)
-    
+    r_c_current = -r[num_c]
+    theta_current = 2 * torch.arctan(h_max_current / r_c_current)
+
     m_dot = torch.zeros_like(r)
     m_dot[num_c:-num_c] = mass_loss(params, r[num_c:-num_c], theta_current, r_c_current)
-    
+
     return m_dot
 
-def evap_velocity (params, m_dot, h):
-    dh_dr, = grad(h,params.dr)
-    w_e = -m_dot/params.rho* torch.sqrt(1 + torch.square(dh_dr))
+
+def evap_velocity(params, m_dot, h):
+    (dh_dr,) = grad(h, params.dr)
+    w_e = -m_dot / params.rho * torch.sqrt(1 + torch.square(dh_dr))
     return w_e
+
 
 def calculate_dh_dt(t, params, r, z, field_vars, h):
     """Calculate dh/dt from u velocities for integration with solve_ivp"""
@@ -229,18 +254,19 @@ def calculate_dh_dt(t, params, r, z, field_vars, h):
     integral_u_r = torch.trapz(r[:, None] * u_grid, dx=params.dz, axis=1) + 1.0e-8
     # TODO scaling??
     integral_u_r *= params.dz
-    grad_u_r, = grad(integral_u_r, params.dr)
+    (grad_u_r,) = grad(integral_u_r, params.dr)
     grad_u_r = gaussian_filter(grad_u_r, sigma=10)
 
     # Calculate dh/dt as radial term plus evaporation rate
     radial_term = (-1 / r) * grad_u_r
 
-    m_dot = mass_loss_tracked_r_c(params, r , h)
+    m_dot = mass_loss_tracked_r_c(params, r, h)
     w_e = evap_velocity(params, m_dot, h)
 
     dh_dt = radial_term + w_e
 
     return dh_dt
+
 
 def run_forward_euler_simulation(params, r, z, field_vars, h0):
     h_profiles = [h0]
@@ -250,11 +276,12 @@ def run_forward_euler_simulation(params, r, z, field_vars, h0):
         print(t, end="\r")
         dh_dt = calculate_dh_dt(t * params.dt, params, r, z, field_vars, h)
         h = h + params.dt * dh_dt  # Forward Euler step
-        #h = torch.maximum(h, 0)  # Ensure non-negative height
+        # h = torch.maximum(h, 0)  # Ensure non-negative height
         h_profiles.append(h)
 
     h_profiles = np.array(h_profiles)
     return h_profiles
+
 
 def plot_height_profile_evolution(r, h_profiles, params, n_lines=5):
     """Plot the evolution of the height profile over time."""
@@ -275,19 +302,20 @@ def eval(params, r, z, field_vars, h0):
     plot_height_profile_evolution(r, h_profiles, params)
     return h_profiles
 
+
 def inspect(params, r, z, field_vars, h):
-    dh_dr, = grad(h, params.dr)
+    (dh_dr,) = grad(h, params.dr)
     curvature_term = (r * dh_dr) / torch.sqrt(1 + dh_dr**2)
-    d_curvature_dr, = grad(curvature_term, params.dr)
+    (d_curvature_dr,) = grad(curvature_term, params.dr)
     pressure = calc_pressure(params, r, z, field_vars, h)
     dp_dr = grad(pressure, params.dr)
 
     u_grid = compute_u_velocity(params, r, z, field_vars, h)
-    integral_u_r = torch.trapz(r[:, None] * u_grid, dx=params.dz, axis=1) +1.0e-8
-    grad_u_r, = grad(integral_u_r, params.dr)
+    integral_u_r = torch.trapz(r[:, None] * u_grid, dx=params.dz, axis=1) + 1.0e-8
+    (grad_u_r,) = grad(integral_u_r, params.dr)
     radial_term = (-1 / r) * grad_u_r
 
-    m_dot = mass_loss_tracked_r_c(params, r , h)
+    m_dot = mass_loss_tracked_r_c(params, r, h)
     w_e = evap_velocity(params, m_dot, h)
 
     dh_dt = radial_term + w_e
@@ -309,9 +337,7 @@ def inspect(params, r, z, field_vars, h):
     plt.show()
 
     plt.plot(pressure, label="pressure")
-    plt.title(
-        f"p max: {torch.max(torch.abs(pressure))}, std: {torch.std(pressure)}"
-    )
+    plt.title(f"p max: {torch.max(torch.abs(pressure))}, std: {torch.std(pressure)}")
     plt.legend()
     plt.show()
 
@@ -354,7 +380,7 @@ def inspect(params, r, z, field_vars, h):
 
 def time_funcs(params, r, z, field_vars, h):
     Start = time.perf_counter()
-    dh_dr ,  = grad(h, params.dr)
+    (dh_dr,) = grad(h, params.dr)
     End = time.perf_counter()
     print(f"grad runtime: {(End - Start)*1000} ms\n")
 
@@ -364,7 +390,7 @@ def time_funcs(params, r, z, field_vars, h):
     print(f"curvature_term runtime: {(End - Start)*1000} ms\n")
 
     Start = time.perf_counter()
-    d_curvature_dr, = grad(curvature_term, params.dr)
+    (d_curvature_dr,) = grad(curvature_term, params.dr)
     End = time.perf_counter()
     print(f"d_curvature_dr runtime: {(End - Start)*1000} ms\n")
 
@@ -374,7 +400,7 @@ def time_funcs(params, r, z, field_vars, h):
     print(f"calc_pressure runtime: {(End - Start)*1000} ms\n")
 
     Start = time.perf_counter()
-    dp_dr, = grad(pressure, params.dr)
+    (dp_dr,) = grad(pressure, params.dr)
     End = time.perf_counter()
     print(f"dp_dr runtime: {(End - Start)*1000} ms\n")
 
@@ -384,12 +410,12 @@ def time_funcs(params, r, z, field_vars, h):
     print(f"u_grid runtime: {(End - Start)*1000} ms\n")
 
     Start = time.perf_counter()
-    integral_u_r = torch.trapz(r[:, None] * u_grid, dx=params.dz, axis=1) +1.0e-8
+    integral_u_r = torch.trapz(r[:, None] * u_grid, dx=params.dz, axis=1) + 1.0e-8
     End = time.perf_counter()
     print(f"integral_u_r runtime: {(End - Start)*1000} ms\n")
 
     Start = time.perf_counter()
-    grad_u_r, = grad(integral_u_r, params.dr)
+    (grad_u_r,) = grad(integral_u_r, params.dr)
     End = time.perf_counter()
     print(f"integral_u_r runtime: {(End - Start)*1000} ms\n")
 
@@ -399,7 +425,7 @@ def time_funcs(params, r, z, field_vars, h):
     print(f"radial_term runtime: {(End - Start)*1000} ms\n")
 
     Start = time.perf_counter()
-    m_dot = mass_loss_tracked_r_c(params, r , h)
+    m_dot = mass_loss_tracked_r_c(params, r, h)
     End = time.perf_counter()
     print(f"m_dot runtime: {(End - Start)*1000} ms\n")
 
@@ -424,7 +450,9 @@ def plot_velocity(params, r, z, field_vars, h):
         aspect="auto",
         origin="lower",
         extent=[-params.r_c, params.r_c, 0, torch.max(z)],
-        cmap="viridis", vmin = 0.0, vmax = 0.02,
+        cmap="viridis",
+        vmin=0.0,
+        vmax=0.02,
     )
     plt.plot(
         r, h, color="red", linewidth=2, label="Height profile $h(r)$"
@@ -443,7 +471,9 @@ def plot_velocity(params, r, z, field_vars, h):
         aspect="auto",
         origin="lower",
         extent=[-params.r_c, params.r_c, 0, torch.max(z)],
-        cmap="viridis",  vmin = 0.0, vmax = 0.01,
+        cmap="viridis",
+        vmin=0.0,
+        vmax=0.01,
     )
     plt.plot(
         r, h, color="red", linewidth=2, label="Height profile $h(r)$"
@@ -464,33 +494,30 @@ def run():
         Nr=203,  # Number of radial points
         Nz=111,  # Number of z-axis points
         Nt=20,  # Number of time steps
-        dr= 2.0 * 1e-3 / 203,  # Radial grid spacing
+        dr=2.0 * 1e-3 / 203,  # Radial grid spacing
         dz=3e-4 / 111,  # Vertical grid spacing
         dt=1e-4,  # Time step size eg 1e-5
         rho=1,  # Density of the liquid (kg/m^3) eg 1
-        w_e=-1e-4, # -1e-3,  # Constant evaporation rate (m/s) eg 1e-4
+        w_e=-1e-4,  # -1e-3,  # Constant evaporation rate (m/s) eg 1e-4
         sigma=0.072,  # Surface tension (N/m) eg 0.072
         eta=1e-3,  # Viscosity (Pa*s) eg 1e-3
         d_sigma_dr=0.0,  # Surface tension gradient
-
-        A = 8.07131, # Antoine Equation (-)
-        B = 1730.63, # Antoine Equation (-)
-        C = 233.4, # Antoine Equation (-)
-        D = 2.42e-5, # Diffusivity of H2O in Air (m^2/s)
-        Mw = 0.018, # Molecular weight H2O vapor (kg/mol)
-        Rs = 8.314, # Gas Constant (J/(K*mol))
-        T = 293.15, # Ambient Temperature (K)
-        RH = 0.20, # Relative Humidity (-)
+        A=8.07131,  # Antoine Equation (-)
+        B=1730.63,  # Antoine Equation (-)
+        C=233.4,  # Antoine Equation (-)
+        D=2.42e-5,  # Diffusivity of H2O in Air (m^2/s)
+        Mw=0.018,  # Molecular weight H2O vapor (kg/mol)
+        Rs=8.314,  # Gas Constant (J/(K*mol))
+        T=293.15,  # Ambient Temperature (K)
+        RH=0.20,  # Relative Humidity (-)
     )
 
     # Initialize the grids and field variables
     r, z, field_vars = setup_grids(params)
 
     # run simulation and plot final profile
-    h_0 = setup_cap_initial_h_profile(
-        r, params.hmax0, params.r_c
-    )
-    #time_funcs(params, r, z, field_vars, h_0)
+    h_0 = setup_cap_initial_h_profile(r, params.hmax0, params.r_c)
+    # time_funcs(params, r, z, field_vars, h_0)
 
     h_profiles = eval(params, r, z, field_vars, h_0)
 

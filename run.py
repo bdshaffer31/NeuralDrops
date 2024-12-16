@@ -10,6 +10,9 @@ import networks
 import logger
 import load_data
 
+import drop_model.utils as drop_utils
+from drop_model import pure_drop_model
+
 
 @torch.no_grad
 def validate(model_type, model, val_loader, loss_fn):
@@ -17,8 +20,14 @@ def validate(model_type, model, val_loader, loss_fn):
     val_loss = 0.0
     if model_type in ["node", "flux_fno", "fno_node"]:
         for t, x_0, z, y in val_loader:
-            y_pred = model(x_0, z, t[0]).transpose(0, 1)
-            loss = loss_fn(y_pred, y)
+            t = t[0]
+            sub_step = 9
+            total_points = (len(t) - 1) * (sub_step + 1) + 1
+            t_sub_stepped = torch.linspace(t[0], t[-1], steps=total_points)
+
+            y_pred = model(x_0, z, t_sub_stepped).transpose(0, 1)
+            y_pred_original_t = y_pred[:, :: sub_step + 1]
+            loss = loss_fn(y_pred_original_t, y)
             val_loss += loss.item()
     elif model_type == "fno":
         for t, h_0, z, h_t in val_loader:
@@ -46,20 +55,16 @@ def train(
 
         if model_type in ["node", "fno_node", "flux_fno"]:
             for t, x_0, z, y_traj in train_loader:
-                # print("t", t.shape, torch.min(t), torch.max(t))
-                #print("x_0", x_0.shape, torch.min(x_0), torch.max(x_0))
-                # print("z", z.shape, torch.min(z), torch.max(z))
-                #print("y_traj", y_traj.shape, torch.min(y_traj), torch.max(y_traj))
                 optimizer.zero_grad()
-                pred_y_traj = model(x_0, z, t[0]).transpose(0, 1)
-                #with torch.no_grad():
-                #    import matplotlib.pyplot as plt
-                #    plt.plot(x_0[0, :], label="x_0")
-                #    plt.plot(pred_y_traj[0, 10, :], label="y_traj")
-                #    #plt.plot(evap_term[0], label="e")
-                #    plt.legend()
-                #    plt.show()
-                loss = loss_fn(pred_y_traj, y_traj)
+
+                t = t[0]
+                sub_step = 9
+                total_points = (len(t) - 1) * (sub_step + 1) + 1
+                t_sub_stepped = torch.linspace(t[0], t[-1], steps=total_points)
+
+                pred_y_traj = model(x_0, z, t_sub_stepped).transpose(0, 1)
+                pred_y_traj_original_t = pred_y_traj[:, :: sub_step + 1]
+                loss = loss_fn(pred_y_traj_original_t, y_traj)
                 loss.backward()
                 optimizer.step()
                 epoch_loss += loss.item()
@@ -151,7 +156,28 @@ def init_fno_node(config):
 
 def init_flux_fno(config):
     model_config = config["model_config"]
-    
+
+    # all post-processing function / smoothings regularizations etc for solver
+    def flux_post_fn(h):
+        h = drop_utils.drop_polynomial_fit_batch(h, 8)
+        h = drop_utils.symmetrize(h)
+        return h
+
+    def smoothing_fn(x): # reconfigure this into flow post function to be consistent
+        return drop_utils.gaussian_blur_1d(x, sigma=10)
+
+    def solver_post_fn(h):
+        h = torch.clamp(h, min=0)  # ensure non-negative height
+        # h = drop_utils.symmetrize(h) # may be needed
+        h = drop_utils.drop_polynomial_fit_batch(
+            h, 8
+        )  # project height on polynomial basis
+        h = drop_utils.symmetrize(h)
+        return h
+
+    data = torch.load(config["data_file"])
+    drop_params, dt = drop_utils.load_drop_params_from_data(data)
+
     activation_fn = networks.get_activation(model_config["activation_fn"])
     fno_model = networks.FNO_Flux(
         model_config["input_dim"],
@@ -162,76 +188,22 @@ def init_flux_fno(config):
         activation_fn=activation_fn,
         num_fc_layers=model_config["num_fc_layers"],
         fc_width=model_config["fc_width"],
+        gamma=model_config["gamma"],
+        model_scale=model_config["flux_model_scale"],
+        post_fn=flux_post_fn,
     )
-    
-    from drop_model import pure_drop_model, utils
-    def smoothing_fn(x):
-        return utils.gaussian_blur_1d(x, sigma=10)
-    
 
-    #TODO Possibly grad grid params from data
-    # params = utils.SimulationParams(
-    #     r_grid = 1280 * model_config["pixel_resolution"],
-    #     hmax0=1024 * model_config["pixel_resolution"] * model_config["profile_scale"],
-    #     Nr=int(1280 / model_config["spatial_sampling"])+1,
-    #     Nz=110,
-    #     dr= 2 * 1280 * model_config["pixel_resolution"] / (int(1280 / model_config["spatial_sampling"]) - 1),
-    #     dz=1024 * model_config["pixel_resolution"] * model_config["profile_scale"] / (110 - 1),
-    #     rho=1,
-    #     sigma=0.072,
-    #     eta=1e-3,
-
-    #     #TODO 
-    #     A = 8.07131,
-    #     B = 1730.63,
-    #     C = 233.4,
-    #     D = 2.42e-5,
-    #     Mw = 0.018,
-    #     #Rs = 8.314,
-    #     Rs = 461.5,
-    #     T = 293.15,
-    #     RH = 0.20,
-    #     )
-
-    data = torch.load(config["data_file"])
-    first_key = list(data.keys())[0]
-    t_lin = data[first_key]["t_lin"]
-    r_lin = data[first_key]["r_lin"]
-    z_lin = data[first_key]["z_lin"]
-    dt = t_lin[1] - t_lin[0]
-    dr = r_lin[1] - r_lin[0]
-    dz = z_lin[1] - z_lin[0]
-
-    params = utils.SimulationParams(
-        r_grid = torch.max(r_lin),
-        hmax0=torch.max(z_lin),
-        Nr=r_lin.shape[0],
-        Nz=z_lin.shape[0],
-        dr=dr,
-        dz=dz,
-        rho=1,
-        sigma=0.072,
-        eta=1e-3,
-
-        #TODO 
-        A = 8.07131,
-        B = 1730.63,
-        C = 233.4,
-        D = 2.42e-5,
-        Mw = 0.018,
-        #Rs = 8.314,
-        Rs = 461.5,
-        T = 293.15,
-        RH = 0.20,
-        )
-
-    flow_model = pure_drop_model.PureDropModel(params, smoothing_fn=smoothing_fn)
-
-    print("dt", dt)
-    # TODO random ass dt scaling to get shit moving
-    dt = dt * 1
-    ode_func = networks.FNOFluxODEWrapper(fno_model, flow_model, profile_scale=config["profile_scale"], time_scale=dt)
-    model = networks.FNOFluxODESolver(ode_func, time_step=dt, solver_type=model_config["solver"] )
+    flow_model = pure_drop_model.PureDropModel(drop_params, smoothing_fn=smoothing_fn)
+    neural_drop = networks.NeuralDrop(
+        fno_model, flow_model, profile_scale=config["profile_scale"], time_scale=dt
+    )
+    ode_func = networks.FNOFluxODEWrapper(neural_drop)
+    model = networks.FNOFluxODESolver(
+        ode_func,
+        dt=1,
+        solver_type=model_config["solver"],
+        post_fn=solver_post_fn,
+    )
     return model
 
 

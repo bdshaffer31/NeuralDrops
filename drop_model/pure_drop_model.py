@@ -1,5 +1,6 @@
 import torch
 
+
 class PureDropModel:
     def __init__(self, params, evap_model=None, smoothing_fn=None):
         # Initialize with a height profile and a params object
@@ -58,8 +59,6 @@ class PureDropModel:
 
         u_grid = self.interp_h_mask_grid(u_grid, h, self.z)
 
-        # u_grid[u_grid > 10] = 10
-        # u_grid[u_grid < -10] = -10
         return u_grid
 
     # w velocity calculation
@@ -74,42 +73,7 @@ class PureDropModel:
         )
         w_grid = self.interp_h_mask_grid(w_grid, h, self.z)
 
-        # w_grid[w_grid > 10] = 10
-        # w_grid[w_grid < -10] = -10
         return w_grid
-
-
-    #u_grid = self.interp_h_mask_grid(u_grid, h, self.z)
-    def interp_h_mask_grid_mdm(self, grid_data, h, z):
-        dz = z[1] - z[0]
-        masked_grid = grid_data.clone()
-
-        lower_indices = torch.searchsorted(z, h)
-        #valid_mask = (lower_indices >= 0) & (lower_indices < len(z) - 1)
-
-        def mask(masked_grid_in, h_r, lower_index_in, z_in):
-            z_below = torch.index_select(z_in, 0, lower_index_in)
-            
-            value_above = torch.index_select(masked_grid_in, 0, lower_index_in)
-            occupation_percent = (h_r - z_below) / dz
-            masked_grid_in[lower_index_in] = occupation_percent * value_above
-
-            #TODO !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-            indices = torch.linspace(0, len(masked_grid_in) -1, len(masked_grid_in))
-            idx = torch.index_select(indices, 0, lower_index_in)
-            indices = torch.linspace(idx, z_in[-1] - 1, int(z_in[-1] - idx))
-
-            #masked_grid_in[idx + 1 :] = 0
-            #masked_grid_in[5 :] = 0
-            masked_grid_in.index_fill_(0, indices, 0.0)
-            #TODO !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-            return masked_grid_in
-        h = torch.unsqueeze(h, 1)
-        lower_indices = torch.unsqueeze(lower_indices, 1)
-
-        masked_grid = torch.vmap(mask, in_dims = (0, 0, 0, None))(masked_grid, h, lower_indices, z)
-        return masked_grid
-
 
     def interp_h_mask_grid(self, grid_data, h, z):
         dz = z[1] - z[0]
@@ -129,28 +93,6 @@ class PureDropModel:
         indices = torch.arange(grid_size).expand(batch_size, -1)
         mask = indices <= lower_indices.unsqueeze(1)
         masked_grid *= mask
-
-        return masked_grid
-    
-    #TODO Remove once new is fixed
-    def interp_h_mask_grid_old(self, grid_data, h, z):
-        dz = z[1] - z[0]
-        masked_grid = grid_data.clone()
-
-        lower_indices = torch.searchsorted(z, h) - 1
-        valid_mask = (lower_indices >= 0) & (lower_indices < len(z) - 1)
-
-        z_below = z[lower_indices[valid_mask]]
-        h_valid = h[valid_mask]
-        occupation_percent = (h_valid - z_below) / dz
-
-        masked_grid[valid_mask, lower_indices[valid_mask] + 1] *= occupation_percent
-        for i, idx in zip(
-            torch.nonzero(valid_mask, as_tuple=True)[0], lower_indices[valid_mask]
-        ):
-            masked_grid[i, idx + 2 :] = 0
-        invalid_mask = ~valid_mask
-        masked_grid[invalid_mask] = 0
 
         return masked_grid
 
@@ -198,23 +140,25 @@ def main():
         hmax0=5e-4,  # Initial droplet height at the center in meters
         Nr=640,  # Number of radial points
         Nz=110,  # Number of z-axis points
-        dr= 2 * 1.0e-3 / (256 - 1),  # Radial grid spacing
+        dr=2 * 1.0e-3 / (256 - 1),  # Radial grid spacing
         dz=5e-4 / (110 - 1),  # Vertical grid spacing
         rho=1,  # Density of the liquid (kg/m^3) eg 1
         sigma=0.072,  # Surface tension (N/m) eg 0.072
         eta=1e-3,  # Viscosity (Pa*s) eg 1e-5
-
-        A = 8.07131, # Antoine Equation (-)
-        B = 1730.63, # Antoine Equation (-)
-        C = 233.4, # Antoine Equation (-)
-        D = 2.42e-5, # Diffusivity of H2O in Air (m^2/s)
-        Mw = 0.018, # Molecular weight H2O vapor (kg/mol)
-        #Rs = 8.314, # Gas Constant (J/(K*mol))
-        Rs = 461.5, # Gas Constant (J/(K*kg))
-        T = 293.15, # Ambient Temperature (K)
-        RH = 0.20, # Relative Humidity (-)
     )
-    Nt = 1000
+    evap_params = utils.EvapParams(
+        A=8.07131,  # Antoine Equation (-)
+        B=1730.63,  # Antoine Equation (-)
+        C=233.4,  # Antoine Equation (-)
+        D=2.42e-5,  # Diffusivity of H2O in Air (m^2/s)
+        Mw=0.018,  # Molecular weight H2O vapor (kg/mol)
+        # Rs = 8.314, # Gas Constant (J/(K*mol))
+        Rs=461.5,  # Gas Constant (J/(K*kg))
+        T=293.15,  # Ambient Temperature (K)
+        RH=0.20,  # Relative Humidity (-)
+    )
+
+    Nt = 100
     dt = 1e-2
     t_lin = torch.linspace(0, dt * Nt, Nt)
 
@@ -222,15 +166,17 @@ def main():
         return utils.gaussian_blur_1d(x, sigma=10)
 
     # Working Evap Choices: [no_evap_model, constant_evap_model, deegan_evap_model]
-    drop_model = PureDropModel(params, evap_model=evap_models.constant_evap_model, smoothing_fn=smoothing_fn)
-
-    r_c = 0.5*params.r_grid
-
-    #h_0 = utils.setup_polynomial_initial_h_profile(
-    #    drop_model.r, 0.8 * params.hmax0, r_c, order=4
-    #)
-    h_0 = utils.setup_cap_initial_h_profile(drop_model.r, 0.8 * params.hmax0, r_c
+    drop_model = PureDropModel(
+        params, evap_model=evap_models.deegan_evap_model, smoothing_fn=smoothing_fn
     )
+
+    r_c = 0.5 * params.r_grid
+
+    h_0 = utils.setup_polynomial_initial_h_profile(
+        drop_model.r, 0.8 * params.hmax0, r_c, order=4
+    )
+    # h_0 = utils.setup_cap_initial_h_profile(drop_model.r, 0.8 * params.hmax0, r_c
+    # )
 
     drop_viz.flow_viz(drop_model, h_0, 0, 0)
 
@@ -244,10 +190,10 @@ def main():
 
     # drop_viz.inspect(drop_model, h_history[-1].clone())
     drop_viz.plot_velocity(drop_model, h_history[-1].clone())
-    #drop_viz.inspect(drop_model, h_history[0].clone())
-    #drop_viz.plot_velocity(drop_model, h_history[0].clone(), 0, 0)
+    # drop_viz.inspect(drop_model, h_history[0].clone())
+    # drop_viz.plot_velocity(drop_model, h_history[0].clone(), 0, 0)
     drop_viz.flow_viz(drop_model, h_history[-1].clone(), 0, 0)
-    #drop_viz.flow_viz(drop_model, h_history[-1].clone())
+    # drop_viz.flow_viz(drop_model, h_history[-1].clone())
 
 
 if __name__ == "__main__":

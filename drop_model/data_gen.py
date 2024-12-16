@@ -18,23 +18,33 @@ def default_params():
         dz=5e-4 / (110 - 1),  # Vertical grid spacing
         rho=1,  # Density of the liquid (kg/m^3) eg 1
         sigma=0.072,  # Surface tension (N/m) eg 0.072
-        eta=1e-5,  # Viscosity (Pa*s) eg 1e-3
-
-        A = 8.07131, # Antoine Equation (-)
-        B = 1730.63, # Antoine Equation (-)
-        C = 233.4, # Antoine Equation (-)
-        D = 2.42e-5, # Diffusivity of H2O in Air (m^2/s)
-        Mw = 0.018, # Molecular weight H2O vapor (kg/mol)
-        #Rs = 8.314, # Gas Constant (J/(K*mol))
-        Rs = 461.5, # Gas Constant (J/(K*kg))
-        T = 293.15, # Ambient Temperature (K)
-        RH = 0.20, # Relative Humidity (-)
+        eta=1e-3,  # Viscosity (Pa*s) eg 1e-3
     )
     return params
 
+def deegan_params():
+    evap_params = utils.EvapParams(
+         A=8.07131,  # Antoine Equation (-)
+        B=1730.63,  # Antoine Equation (-)
+        C=233.4,  # Antoine Equation (-)
+        D=2.42e-5,  # Diffusivity of H2O in Air (m^2/s)
+        Mw=0.018,  # Molecular weight H2O vapor (kg/mol)
+        # Rs = 8.314, # Gas Constant (J/(K*mol))
+        Rs=461.5,  # Gas Constant (J/(K*kg))
+        T=293.15,  # Ambient Temperature (K)
+        RH=0.20,  # Relative Humidity (-)
+    )
+    return evap_params
+
 
 def run_sim(h0, params, t_lin):
-    evap_model = evap_models.constant_evap_model
+    def constant_evap_model(params, r, h, kappa=1.0e-5):
+        sqr = torch.linspace(-1, 1, len(r)) ** 2
+        return -kappa * torch.ones_like(h) * sqr
+    
+    evap_params = deegan_params()
+    def deegan_evap_wrapped(params, r, h):
+        return evap_models.deegan_evap_model(evap_params, params, r, h)
 
     def smoothing_fn(x):
         return utils.gaussian_blur_1d(x, sigma=10)
@@ -44,7 +54,9 @@ def run_sim(h0, params, t_lin):
         h = utils.drop_polynomial_fit(h, 8)  # project height on polynomial basis
         return h
 
-    drop_model = PureDropModel(params, evap_model=evap_model, smoothing_fn=smoothing_fn)
+    drop_model = PureDropModel(
+        params, evap_model=deegan_evap_wrapped, smoothing_fn=smoothing_fn
+    )
 
     h_history = utils.run_forward_euler_simulation(drop_model, h0, t_lin, post_fn)
 
@@ -67,8 +79,8 @@ def main():
     r_lin = torch.linspace(-params.r_grid, params.r_grid, params.Nr)
     z_lin = torch.linspace(0, params.hmax0, params.Nz)
     x_lin = torch.linspace(-1, 1, params.Nr)
-    Nt = 500
-    dt = 5e-5
+    Nt = 200
+    dt = 1e-2
     t_lin = torch.linspace(0, dt * Nt, Nt)
 
     for i in range(10):
@@ -111,7 +123,7 @@ def main():
         }
         results[i] = current_result
 
-    torch.save(results, "data/simulation_results.pth")
+    torch.save(results, "data/simulation_results_deegan.pth")
 
 
 if __name__ == "__main__":

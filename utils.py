@@ -65,7 +65,7 @@ def load_drop_data_from_xlsx(excel_file="data\Qualifying Exam Data.xlsx"):
             ],
             dtype=np.float64,
         )
-        data_tensor = torch.tensor(data_numpy, dtype=torch.float32)
+        data_tensor = torch.tensor(data_numpy, dtype=torch.float64)
         tensors[sheet_name] = data_tensor
 
     return tensors
@@ -74,7 +74,7 @@ def load_drop_data_from_xlsx(excel_file="data\Qualifying Exam Data.xlsx"):
 def load_test_mat_file(filename="data\Test_Drop_Boundary.mat"):
     mat_data = scipy.io.loadmat(filename)
     data = mat_data["bound"]
-    numpy_data = np.array([frame[:, 1] for frame in data[0]], dtype="float32")
+    numpy_data = np.array([frame[:, 1] for frame in data[0]], dtype="float64")
     processed_data = (numpy_data - np.min(numpy_data)) / (
         np.max(numpy_data) - np.min(numpy_data)
     )
@@ -95,9 +95,9 @@ def detrend_dataset(dataset, last_n=100, window_size=10):
     profile_right = mean_profile[-window_size:]
 
     # Concatenate the left and right profiles
-    x_left = torch.arange(profile_left.shape[0], dtype=torch.float32)
+    x_left = torch.arange(profile_left.shape[0], dtype=torch.float64)
     x_right = torch.arange(
-        mean_profile.shape[0] - window_size, mean_profile.shape[0], dtype=torch.float32
+        mean_profile.shape[0] - window_size, mean_profile.shape[0], dtype=torch.float64
     )
     x = torch.cat([x_left, x_right])
     profile_combined = torch.cat([profile_left, profile_right])
@@ -107,7 +107,7 @@ def detrend_dataset(dataset, last_n=100, window_size=10):
     params = torch.linalg.lstsq(A, profile_combined[:, None]).solution
 
     # project the linear trend onto the entire x range
-    x_full = torch.arange(dataset.shape[1], dtype=torch.float32)
+    x_full = torch.arange(dataset.shape[1], dtype=torch.float64)
     A_full = torch.stack([x_full, torch.ones_like(x_full)], dim=1)
     linear_trend = (A_full @ params).flatten()
 

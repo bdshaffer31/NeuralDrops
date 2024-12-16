@@ -8,17 +8,20 @@ def flux_fno_model_config():
         # "model_type": "flux_fno",
         "modes": 16,
         "num_fno_layers": 4,
-        "fno_width": 64,
+        "fno_width": 16,
         "num_fc_layers": 4,
-        "fc_width": 256,
+        "fc_width": 128,
         "activation_fn": "relu",
         "solver": "euler",
+        "gamma": 1e-2,  # constant evap for stability eg 1e-2
+        "flux_model_scale": 1e-1,  # scaling on evap model for stability eg 1e-3
         # "profile_scale": 1e6,  # approx 1 / spacial unit order of magnitude
         # "pixel_resolution": 0.000003, # m / pixel
         # "spatial_sampling": 6, # m / pixel
         # "time_inc": 0.05/12, # time increment and temporal sampling
     }
     return model_config
+
 
 def fno_node_model_config():
     model_config = {
@@ -47,7 +50,6 @@ def fno_model_config():
     return model_config
 
 
-
 def node_model_config():
     model_config = {
         # "model_type": "node",
@@ -72,26 +74,26 @@ def get_model_config(model_type):
 
 def main(train=False):
     # if a config file isn't provided load from options
-    run_dir = "test_fno_axis_symmetric"
+    run_dir = "fno_flux_drop_data_10"
     config = {
         "run_dir": run_dir,
         "manual_seed": 42,
-        "num_epochs": 10,
-        "traj_len": 10,
+        "num_epochs": 2,
+        "traj_len": 8,
         "lr": 1e-2,
         "model_type": "flux_fno",  # specify model type
-        "data_file": "data/simulation_results.pth",  # specify data type
-        "batch_size": 32,
+        "data_file": "data/drop_data_10.pth",  # specify data type
+        "batch_size": 16,
         "val_ratio": 0.1,
         "run_keys": [1],  # if None use all
-        "conditioning_keys": ["alpha", "beta", "gamma"],
-        "profile_scale": 1e6,  # approx 1 / spacial unit order of magnitude
+        "conditioning_keys": [], #["alpha", "beta", "gamma"],
+        "profile_scale": 1e3,  # approx 1 / spacial unit order of magnitude
     }
 
     config["model_config"] = get_model_config(config["model_type"])
 
     torch.manual_seed(config["manual_seed"])
-    torch.set_default_dtype(torch.float32)
+    torch.set_default_dtype(torch.float64)
 
     if train:
         run.run_training(config, run_dir)
@@ -100,4 +102,3 @@ def main(train=False):
 
 if __name__ == "__main__":
     main(train=True)
-    
