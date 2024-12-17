@@ -11,7 +11,7 @@ import evap_models as evap_models
 def default_params():
     params = utils.SimulationParams(
         r_grid=1.28e-3,  # Radius of the droplet in meters
-        hmax0=6.4e-4,  # Initial droplet height at the center in meters
+        hmax0=7.4e-4,  # Initial droplet height at the center in meters
         Nr=640,  # Number of radial points
         Nz=220,  # Number of z-axis points
         dr=2 * 1.28e-3 / (640 - 1),  # Radial grid spacing
@@ -84,7 +84,7 @@ def main():
     r_lin = torch.linspace(-params.r_grid, params.r_grid, params.Nr)
     z_lin = torch.linspace(0, params.hmax0, params.Nz)
     x_lin = torch.linspace(-1, 1, params.Nr)
-    Nt = 25000
+    Nt = 30000
     dt = 2e-3
     t_lin = torch.linspace(0, dt * Nt, Nt)
     r_c = 0.8
@@ -93,13 +93,13 @@ def main():
         alpha = np.random.rand()
         beta = np.random.rand()
         gamma = np.random.rand()
-        y = polynomial_init(x_lin, r_c, 0.8*params.hmax0, alpha, beta, gamma, 0.0)
+        y = polynomial_init(x_lin, r_c, 0.7*params.hmax0, alpha, beta, gamma, 0.0)
         plt.plot(r_lin, y, alpha=0.2, c="k")
     plt.show()
 
     # generate the datasets
     results = {}
-    for i in range(20):
+    for i in range(1):
         if i > 5:
             params.T = 303.15
         elif i > 10:
@@ -119,6 +119,7 @@ def main():
         plt.plot(h_history[-1])
         plt.show()
         print(torch.min(h_history), torch.max(h_history))
+        drop_viz.plot_height_profile_evolution(r_lin, h_history[::250], params)
         # print(h_history.shape, t_lin.shape)
 
         # Saved dataset MUST have:
@@ -128,18 +129,18 @@ def main():
         # "z": z_lin,
         # and can additionally have any number of extra contents or conditioning data
         current_result = {
-            "profile": h_history,
+            "profile": h_history[::500],
             "alpha": alpha,
             "beta": beta,
             "gamma": gamma,
-            "t_lin": t_lin,
+            "t_lin": t_lin[::500],
             "r_lin": r_lin,
             "z_lin": z_lin,
             "Temp": evap_params.T,
             "hmax": params.hmax0,
         }
         results[i] = current_result
-    torch.save(results, "data/simulation_results_deegan_mdm_2.pth")
+    torch.save(results, "data/simulation_mdm_4.pth")
 
 
 if __name__ == "__main__":

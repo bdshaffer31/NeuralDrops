@@ -121,7 +121,7 @@ def preprocess_and_save(
         data = load_data(os.path.join(data_dir, file))
         raw_profile = data["profile"]
         t_lin = torch.arange(raw_profile.shape[0] + temporal_pad*temporal_subsample) / 20
-        r_lin = torch.arange(raw_profile.shape[1]) * m_per_px
+        r_lin = torch.arange(raw_profile.shape[1]) * m_per_px # shit this should go from negative -n / mppx to n / mppx
         z_lin = torch.arange(h_max) * m_per_px
         raw_profile = raw_profile * m_per_px
         profile = preprocess_profile(
@@ -234,7 +234,7 @@ class FNODataset(Dataset):
         """
         self.run_keys = run_keys
         self.data = {
-            k: v.to(torch.float64)
+            k: v
             for k, v in data.items()
             if run_keys is None or k in run_keys
         }

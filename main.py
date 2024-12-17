@@ -72,22 +72,22 @@ def get_model_config(model_type):
     return model_configs[model_type]()
 
 
-def main(train=False):
+def main(run_dir):
     # if a config file isn't provided load from options
-    run_dir = "fno_flux_deegan_mdm_17DEC24"
+    
     config = {
         "run_dir": run_dir,
         "manual_seed": 42,
-        "num_epochs": 2,
+        "num_epochs": 12,
         "traj_len": 8,
         "lr": 1e-2,
         "model_type": "flux_fno",  # specify model type
-        "data_file": "data/simulation_results_deegan_mdm_2.pth",  # specify data type
+        "data_file": "data/simulation_mdm_3.pth",  # specify data type
         "batch_size": 16,
         "val_ratio": 0.1,
-        "run_keys": [1,2,3,4,5],  # if None use all example: [1]
-        "conditioning_keys": ["Temp","hmax"], #["alpha", "beta", "gamma"],
-        "profile_scale": 1e3,  # approx 1 / spacial unit order of magnitude
+        "run_keys": [0],  # if None use all
+        "conditioning_keys": [], #["alpha", "beta", "gamma"],
+        "profile_scale": 1e2,  # approx 1 / spacial unit order of magnitude e.g. 1e3
     }
 
     config["model_config"] = get_model_config(config["model_type"])
@@ -95,10 +95,15 @@ def main(train=False):
     torch.manual_seed(config["manual_seed"])
     torch.set_default_dtype(torch.float64)
 
-    if train:
-        run.run_training(config, run_dir)
-    visualize.viz_results(run_dir)
+    # if train:
+    run.run_training(config, run_dir)
+    # visualize.viz_results(run_dir)
 
 
 if __name__ == "__main__":
-    main(train=True)
+    # run_dir = "node_drop_data_10"
+    # run_dir = "fno_drop_data"
+    # run_dir = "fno_flux_deegan"
+    run_dir = "fno_flux_drop_data_10"
+    # main(run_dir) # comment / uncomment to train or not, yes this is janky ...
+    visualize.viz_results(run_dir)
