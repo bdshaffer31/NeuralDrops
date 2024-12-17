@@ -11,7 +11,7 @@ import evap_models as evap_models
 def default_params():
     params = utils.SimulationParams(
         r_grid=1.28e-3,  # Radius of the droplet in meters
-        hmax0=2.4e-4,  # Initial droplet height at the center in meters
+        hmax0=6.4e-4,  # Initial droplet height at the center in meters
         Nr=640,  # Number of radial points
         Nz=220,  # Number of z-axis points
         dr=2 * 1.28e-3 / (640 - 1),  # Radial grid spacing
@@ -93,7 +93,7 @@ def main():
         alpha = np.random.rand()
         beta = np.random.rand()
         gamma = np.random.rand()
-        y = polynomial_init(x_lin, r_c, params.hmax0, alpha, beta, gamma, 0.0)
+        y = polynomial_init(x_lin, r_c, 0.8*params.hmax0, alpha, beta, gamma, 0.0)
         plt.plot(r_lin, y, alpha=0.2, c="k")
     plt.show()
 
