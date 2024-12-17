@@ -107,16 +107,16 @@ def load_model_from_log_loader(log_loader):
 def init_node_model(config):
     model_config = config["model_config"]
     activation_fn = networks.get_activation(model_config["activation_fn"])
-    model = networks.FNO(
+
+    model = networks.ODE_FCNN(
         model_config["input_dim"],
         model_config["output_dim"],
-        num_fno_layers=model_config["num_fno_layers"],
-        modes=model_config["modes"],
-        width=model_config["fno_width"],
+        hidden_dim=model_config["hidden_dim"],
+        num_hidden_layers=model_config["num_hidden_layers"],
+        conditioning_dim=model_config["conditioning_dim"],
         activation_fn=activation_fn,
-        num_fc_layers=model_config["num_fc_layers"],
-        fc_width=model_config["fc_width"],
     )
+    model = networks.NeuralODE(model, solver=model_config["solver"])
     return model
 
 

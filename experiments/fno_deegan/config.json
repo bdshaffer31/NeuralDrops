@@ -1,0 +1,27 @@
+{
+    "run_dir": "fno_deegan",
+    "manual_seed": 42,
+    "num_epochs": 4,
+    "traj_len": 8,
+    "lr": 0.01,
+    "model_type": "fno",
+    "data_file": "data/simulation_results_deegan.pth",
+    "batch_size": 16,
+    "val_ratio": 0.1,
+    "run_keys": [
+        1
+    ],
+    "conditioning_keys": [],
+    "profile_scale": 10000.0,
+    "model_config": {
+        "modes": 16,
+        "num_fno_layers": 4,
+        "fno_width": 256,
+        "num_fc_layers": 4,
+        "fc_width": 256,
+        "activation_fn": "relu",
+        "conditioning_dim": 0,
+        "input_dim": 2,
+        "output_dim": 1
+    }
+}
