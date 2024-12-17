@@ -35,6 +35,8 @@ def deegan_evap_model(evap_params, params, r, h):
         J_term = (b_c - evap_params.RH) * J_c + J_delta
 
         m_dot = evap_params.D * evap_params.Mw * p_sat / (evap_params.Rs * evap_params.T * R_c) * J_term
+        #import matplotlib.pyplot as plt
+        #plt.plot(r_in,m_dot)
         return m_dot
 
     m_dot = torch.zeros_like(r)
@@ -50,11 +52,11 @@ def deegan_evap_model(evap_params, params, r, h):
     #        -r_c_current, r_c_current, (end_idx - start_idx)
     #    )  # r grid (avoiding r=0)
 
-    num_c = list(map(lambda i: i > 0.0001 * params.hmax0, h)).index(True)
-    mask = torch.abs(h) > 0.01 * params.hmax0
-    non_zero_indices = torch.where(mask)[0]
-    num_c = non_zero_indices[0]
-    num_c = int(num_c)
+    num_c = list(map(lambda i: i > 0.01 * params.hmax0, h)).index(True)
+    #mask = torch.abs(h) > 1.0e-2 * params.hmax0
+    #non_zero_indices = torch.where(mask)[0]
+    #num_c = non_zero_indices[0]
+    #num_c = int(num_c)
     r_c_current = -r[num_c]
     theta_current = 2 * torch.arctan(h_max_current / r_c_current)
 
@@ -65,7 +67,7 @@ def deegan_evap_model(evap_params, params, r, h):
 
     dh_dr = grad(h, params.dr)
     w_e = -m_dot / params.rho * torch.sqrt(1 + torch.square(dh_dr))
-    return w_e - 1.0e-6
+    return w_e - 2.0e-7
 
 
 def diddens_evap_model(params, r, h):
