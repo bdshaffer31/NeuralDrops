@@ -74,6 +74,20 @@ def polynomial_init(r, r_c, hmax0, alpha, beta, gamma, epsilon):
     y[-num_c:] = 0.0
     return y
 
+def cap_init(r_cap, h0, r_c):
+    h = torch.zeros_like(r_cap)
+    num_c = list(map(lambda i: i >= -r_c, r_cap)).index(True) + 1
+    # setup a spherical cap initial height profile
+    R = (r_c**2 + h0**2) / (2 * h0)
+    # theta = torch.arccos(torch.tensor([1 - h0 * R]))
+    h[num_c:-(num_c)] = torch.sqrt(
+        (
+            2.0 * R * (r_cap[num_c:-(num_c)] + R)
+            - torch.square(r_cap[num_c:-(num_c)] + R)
+        )
+    ) - (R - h0)
+
+    return h
 
 def main():
     drop_viz.set_styling()
@@ -84,7 +98,7 @@ def main():
     r_lin = torch.linspace(-params.r_grid, params.r_grid, params.Nr)
     z_lin = torch.linspace(0, params.hmax0, params.Nz)
     x_lin = torch.linspace(-1, 1, params.Nr)
-    Nt = 30000
+    Nt = 20000
     dt = 2e-3
     t_lin = torch.linspace(0, dt * Nt, Nt)
     r_c = 0.8
@@ -93,28 +107,33 @@ def main():
         alpha = np.random.rand()
         beta = np.random.rand()
         gamma = np.random.rand()
-        y = polynomial_init(x_lin, r_c, 0.6*params.hmax0, alpha, beta, gamma, 0.0)
+        #y = polynomial_init(x_lin, r_c, 0.6*params.hmax0, alpha, beta, gamma, 0.0)
+        y = cap_init(x_lin, 0.6*params.hmax0, r_c)
         plt.plot(r_lin, y, alpha=0.2, c="k")
     plt.show()
 
     # generate the datasets
     results = {}
-    for i in range(20):
+    for i in range(2):
         if i > 10:
             params.T = 303.15
+
+        if i > 1:
+            params.hmax0 = 1.1 * params.hmax0
 
 
         alpha = np.random.rand()
         beta = np.random.rand()
         gamma = np.random.rand()
-        h0 = polynomial_init(x_lin, r_c, params.hmax0, alpha, beta, gamma, 0.0)
+        #h0 = polynomial_init(x_lin, r_c, params.hmax0, alpha, beta, gamma, 0.0)
+        h0 = cap_init(x_lin, 0.6 * params.hmax0, r_c)
         h_history = run_sim(h0, evap_params, params, t_lin)[:-1]
 
         #plt.plot(h_history[0])
         #plt.plot(h_history[-1])
         #plt.show()
         print(torch.min(h_history), torch.max(h_history))
-        #drop_viz.plot_height_profile_evolution(r_lin, h_history[::250], params)
+        drop_viz.plot_height_profile_evolution(r_lin, h_history[::250], params)
 
         print(h_history.shape, t_lin.shape)
         print(h_history[::25].shape, t_lin[::25].shape)
