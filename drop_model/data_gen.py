@@ -84,7 +84,7 @@ def main():
     r_lin = torch.linspace(-params.r_grid, params.r_grid, params.Nr)
     z_lin = torch.linspace(0, params.hmax0, params.Nz)
     x_lin = torch.linspace(-1, 1, params.Nr)
-    Nt = 10000
+    Nt = 30000
     dt = 2e-3
     t_lin = torch.linspace(0, dt * Nt, Nt)
     r_c = 0.8
@@ -99,13 +99,8 @@ def main():
 
     # generate the datasets
     results = {}
-    for i in range(2):
-        if i > 5:
-            params.T = 303.15
-        elif i > 10:
-            params.T = 293.15
-            params.hmax0 = 4.4e-4
-        elif i > 15:
+    for i in range(20):
+        if i > 10:
             params.T = 303.15
 
 
@@ -142,7 +137,7 @@ def main():
             "hmax": params.hmax0,
         }
         results[i] = current_result
-    torch.save(results, "data/simulation_mdm_5.pth")
+    torch.save(results, "data/simulation_mdm_6.pth")
 
 
 if __name__ == "__main__":
