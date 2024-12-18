@@ -78,15 +78,15 @@ def main(run_dir):
     config = {
         "run_dir": run_dir,
         "manual_seed": 42,
-        "num_epochs": 12,
+        "num_epochs": 4,
         "traj_len": 8,
         "lr": 1e-2,
         "model_type": "flux_fno",  # specify model type
-        "data_file": "data/simulation_mdm_3.pth",  # specify data type
+        "data_file": "data/simulation_mdm_5.pth",  # specify data type
         "batch_size": 16,
         "val_ratio": 0.1,
-        "run_keys": [0],  # if None use all
-        "conditioning_keys": [], #["alpha", "beta", "gamma"],
+        "run_keys": [1,2],  # if None use all
+        "conditioning_keys": ["alpha", "beta", "gamma", "Temp","hmax"], #["alpha", "beta", "gamma", "Temp","hmax"],
         "profile_scale": 1e2,  # approx 1 / spacial unit order of magnitude e.g. 1e3
     }
 
@@ -104,6 +104,6 @@ if __name__ == "__main__":
     # run_dir = "node_drop_data_10"
     # run_dir = "fno_drop_data"
     # run_dir = "fno_flux_deegan"
-    run_dir = "fno_flux_drop_data_10"
-    # main(run_dir) # comment / uncomment to train or not, yes this is janky ...
+    run_dir = "fno_flux_mdm_17DEC_test3"
+    main(run_dir) # comment / uncomment to train or not, yes this is janky ...
     visualize.viz_results(run_dir)

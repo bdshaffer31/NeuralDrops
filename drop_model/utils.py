@@ -147,7 +147,10 @@ def drop_polynomial_fit(h_0, degree=3):
     A = x_nonzero.unsqueeze(1) ** powers
     #A = A.to(torch.float32)
     A = A.to(torch.float64)
-    coeffs, *_ = torch.linalg.lstsq(A, h_0_nonzero.unsqueeze(1))
+    #print(h_0_nonzero.shape)
+    h_coeffs = h_0_nonzero.unsqueeze(1)
+    #print(h_coeffs.shape)
+    coeffs, *_ = torch.linalg.lstsq(A, h_coeffs)
     h_0_fitted = (A @ coeffs).squeeze(1)
 
     h_0_fitted_full = h_0.clone()
