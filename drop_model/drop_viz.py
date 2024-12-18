@@ -421,3 +421,14 @@ def set_nans_in_corners(x, corner_mask_size=5):
     x[start_idx:mask_start, :] = float("nan")
     x[mask_end : end_idx + 1, :] = float("nan")
     return x
+
+def plot_converging_volume(num_dec, V_in):
+    """Plot the evolution of the height profile over time."""
+    plt.figure(figsize=(6, 4))
+    plt.plot(r * 1e-3, h_profiles[-1] * 1e-3, c="r", label="Final")
+    plt.xlabel("Radius (mm)")
+    plt.ylabel("Height (mm)")
+    plt.legend()
+    plt.title("Evolution of Droplet Height Profile Over Time")
+    plt.tight_layout()
+    plt.show()

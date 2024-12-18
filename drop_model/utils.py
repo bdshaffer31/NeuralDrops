@@ -228,3 +228,9 @@ def dis_press(params, r_grid, hmax0, sigma):
         )
     )
     return dis_press
+
+def calc_volume(params, r_in, h_in):
+    int = torch.trapz(h_in, r_in)
+    V = 2.0*torch.pi*int
+    return V
+
