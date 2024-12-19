@@ -10,12 +10,12 @@ import evap_models as evap_models
 
 def default_params():
     params = utils.SimulationParams(
-        r_grid=1.28e-3,  # Radius of the droplet in meters
-        hmax0=7.0e-4,  # Initial droplet height at the center in meters
+        r_grid=1.0e-3,  # Radius of the droplet in meters
+        hmax0=5.0e-4,  # Initial droplet height at the center in meters
         Nr=640,  # Number of radial points
         Nz=220,  # Number of z-axis points
-        dr=2 * 1.28e-3 / (640 - 1),  # Radial grid spacing
-        dz=7.0e-4 / (220 - 1),  # Vertical grid spacing
+        dr=2 * 1.0e-3 / (640 - 1),  # Radial grid spacing
+        dz=5.0e-4 / (220 - 1),  # Vertical grid spacing
         rho=1,  # Density of the liquid (kg/m^3) eg 1
         sigma=0.072,  # Surface tension (N/m) eg 0.072
         eta=1e-3,  # Viscosity (Pa*s) eg 1e-5
@@ -98,11 +98,11 @@ def main():
     r_lin = torch.linspace(-params.r_grid, params.r_grid, params.Nr)
     z_lin = torch.linspace(0, params.hmax0, params.Nz)
     x_lin = torch.linspace(-1, 1, params.Nr)
-    Nt = 26000
+    Nt = 10000
     dt = 2e-3
     t_lin = torch.linspace(0, dt * Nt, Nt)
     r_c = 0.8
-    h_init = 0.5*params.hmax0
+    h_init = 0.8*params.hmax0
 
     for i in range(1):
         alpha = np.random.rand()
@@ -110,8 +110,8 @@ def main():
         gamma = np.random.rand()
         y = polynomial_init(x_lin, r_c, h_init, alpha, beta, gamma, 0.0)
         #y = cap_init(x_lin, h_init, r_c)
-        plt.plot(r_lin, y, alpha=0.2, c="k")
-    plt.show()
+        #plt.plot(r_lin, y, alpha=0.2, c="k")
+    #plt.show()
 
     # generate the datasets
     results = {}
@@ -126,15 +126,15 @@ def main():
         alpha = np.random.rand()
         beta = np.random.rand()
         gamma = np.random.rand()
-        h0 = polynomial_init(x_lin, r_c, h_init, alpha, beta, gamma, 0.0)
-        #h0 = cap_init(x_lin, h_init, r_c)
+        #h0 = polynomial_init(x_lin, r_c, h_init, alpha, beta, gamma, 0.0)
+        h0 = cap_init(x_lin, h_init, r_c)
         h_history = run_sim(h0, evap_params, params, t_lin)[:-1]
 
         #plt.plot(h_history[0])
         #plt.plot(h_history[-1])
         #plt.show()
         print(torch.min(h_history), torch.max(h_history))
-        drop_viz.plot_height_profile_evolution(r_lin, h_history[::100], params)
+        drop_viz.plot_height_profile_evolution(r_lin, h_history[::10], params)
 
         print(h_history.shape, t_lin.shape)
         print(h_history[::25].shape, t_lin[::25].shape)
@@ -146,18 +146,18 @@ def main():
         # "z": z_lin,
         # and can additionally have any number of extra contents or conditioning data
         current_result = {
-            "profile": h_history[::50],
+            "profile": h_history[::20],
             "alpha": alpha,
             "beta": beta,
             "gamma": gamma,
-            "t_lin": t_lin[::50],
+            "t_lin": t_lin[::20],
             "r_lin": r_lin,
             "z_lin": z_lin,
             "Temp": evap_params.T,
             "hmax": params.hmax0,
         }
         results[i] = current_result
-    torch.save(results, "data/mdm_sim_poly_1.pth")
+    torch.save(results, "data/mdm_sim_cap_4.pth")
 
 
 if __name__ == "__main__":

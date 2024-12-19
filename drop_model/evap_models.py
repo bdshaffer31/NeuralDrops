@@ -52,7 +52,7 @@ def deegan_evap_model(evap_params, params, r, h):
     #        -r_c_current, r_c_current, (end_idx - start_idx)
     #    )  # r grid (avoiding r=0)
 
-    num_c = list(map(lambda i: i > 0.01 * params.hmax0, h)).index(True)
+    num_c = list(map(lambda i: i > 0.001 * params.hmax0, h)).index(True)
     #mask = torch.abs(h) > 1.0e-2 * params.hmax0
     #non_zero_indices = torch.where(mask)[0]
     #num_c = non_zero_indices[0]
@@ -67,7 +67,7 @@ def deegan_evap_model(evap_params, params, r, h):
 
     dh_dr = grad(h, params.dr)
     w_e = -m_dot / params.rho * torch.sqrt(1 + torch.square(dh_dr))
-    return w_e - 2.0e-7
+    return w_e - 1.0e-5
 
 
 def diddens_evap_model(params, r, h):
