@@ -13,8 +13,8 @@ def flux_fno_model_config():
         "fc_width": 128,
         "activation_fn": "relu",
         "solver": "euler",
-        "gamma": 1e-3,  # constant evap for stability eg 1e-2
-        "flux_model_scale": 1e-1,  # scaling on evap model for stability eg 1e-3
+        "gamma": 0.01,  # constant evap for stability eg 1e-2
+        "flux_model_scale": 0.1,  # scaling on evap model for stability eg 1e-3
         # "profile_scale": 1e6,  # approx 1 / spacial unit order of magnitude
         # "pixel_resolution": 0.000003, # m / pixel
         # "spatial_sampling": 6, # m / pixel
@@ -78,11 +78,11 @@ def main(run_dir):
     config = {
         "run_dir": run_dir,
         "manual_seed": 42,
-        "num_epochs": 2,
+        "num_epochs": 3,
         "traj_len": 16,
-        "lr": 1e-1,
+        "lr": 0.01,
         "model_type": "flux_fno",  # specify model type
-        "data_file": "data/mdm_sim_cap_4.pth",  # specify data type
+        "data_file": "data/mdm_sim_cap_6.pth",  # specify data type
         "batch_size": 16,
         "val_ratio": 0.1,
         "run_keys": [0,1],  # if None use all
@@ -104,6 +104,6 @@ if __name__ == "__main__":
     # run_dir = "node_drop_data_10"
     # run_dir = "fno_drop_data"
     # run_dir = "fno_flux_deegan"
-    run_dir = "fno_flux_mdm_18DEC_cap_test_3"
+    run_dir = "fno_flux_mdm_19DEC_cap_test_5"
     main(run_dir) # comment / uncomment to train or not, yes this is janky ...
     visualize.viz_results(run_dir)
