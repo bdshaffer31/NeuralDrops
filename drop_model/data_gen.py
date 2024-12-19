@@ -98,7 +98,7 @@ def main():
     r_lin = torch.linspace(-params.r_grid, params.r_grid, params.Nr)
     z_lin = torch.linspace(0, params.hmax0, params.Nz)
     x_lin = torch.linspace(-1, 1, params.Nr)
-    Nt = 15000
+    Nt = 20000
     dt = 2e-3
     t_lin = torch.linspace(0, dt * Nt, Nt)
     r_c = 0.8
