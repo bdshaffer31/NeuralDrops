@@ -98,8 +98,8 @@ def main():
     r_lin = torch.linspace(-params.r_grid, params.r_grid, params.Nr)
     z_lin = torch.linspace(0, params.hmax0, params.Nz)
     x_lin = torch.linspace(-1, 1, params.Nr)
-    Nt = 20000
-    dt = 2e-3
+    Nt = 50000
+    dt = 1e-3
     t_lin = torch.linspace(0, dt * Nt, Nt)
     r_c = 0.8
     h_init = 0.8*params.hmax0
@@ -146,18 +146,18 @@ def main():
         # "z": z_lin,
         # and can additionally have any number of extra contents or conditioning data
         current_result = {
-            "profile": h_history[::10],
+            "profile": h_history[::20],
             "alpha": alpha,
             "beta": beta,
             "gamma": gamma,
-            "t_lin": t_lin[::10],
+            "t_lin": t_lin[::20],
             "r_lin": r_lin,
             "z_lin": z_lin,
             "Temp": evap_params.T,
             "hmax": params.hmax0,
         }
         results[i] = current_result
-    torch.save(results, "data/mdm_sim_cap_5.pth")
+    torch.save(results, "data/mdm_sim_cap_6.pth")
 
 
 if __name__ == "__main__":
