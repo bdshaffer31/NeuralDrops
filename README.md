@@ -1,2 +1,6 @@
-# NeuralDrops
-Modeling droplet evaporation dynamics with neural odes and learned control volumes
+# NeuralDrops / Flux-FNO
+Modeling droplets with physical flow and learned flux
+
+Run instructions:
+run from main
+modify model parameters, architecture, and data choices with configurations

@@ -1,0 +1,36 @@
+{
+    "run_dir": "fno_flux_drop_data_multi",
+    "manual_seed": 42,
+    "num_epochs": 6,
+    "traj_len": 8,
+    "lr": 0.001,
+    "model_type": "flux_fno",
+    "data_file": "data/drop_data_10.pth",
+    "batch_size": 16,
+    "val_ratio": 0.1,
+    "run_keys": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+    ],
+    "conditioning_keys": [],
+    "profile_scale": 100.0,
+    "model_config": {
+        "modes": 16,
+        "num_fno_layers": 4,
+        "fno_width": 16,
+        "num_fc_layers": 4,
+        "fc_width": 128,
+        "activation_fn": "relu",
+        "solver": "euler",
+        "gamma": 0.01,
+        "flux_model_scale": 0.1,
+        "conditioning_dim": 0,
+        "input_dim": 1,
+        "output_dim": 1
+    }
+}

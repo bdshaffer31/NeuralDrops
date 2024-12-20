@@ -1,0 +1,26 @@
+{
+    "run_dir": "node_drop_data_10",
+    "manual_seed": 42,
+    "num_epochs": 4,
+    "traj_len": 8,
+    "lr": 0.001,
+    "model_type": "node",
+    "data_file": "data/drop_data_10.pth",
+    "batch_size": 16,
+    "val_ratio": 0.1,
+    "run_keys": [
+        1
+    ],
+    "conditioning_keys": [],
+    "profile_scale": 100.0,
+    "model_config": {
+        "hidden_dim": 256,
+        "num_hidden_layers": 6,
+        "solver": "rk4",
+        "activation_fn": "relu",
+        "output_fn": "identity",
+        "conditioning_dim": 0,
+        "input_dim": 212,
+        "output_dim": 212
+    }
+}
