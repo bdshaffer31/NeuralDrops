@@ -67,20 +67,36 @@ def viz_results(run_dir):
 
     # loop over all runs in the dataset
     error_vals = []
+    error_std = []
     for run_name in dataset.data:
         height_data = dataset.data[run_name]["profile"]
         pred_traj = trajectory_pred(
             config["model_type"], model, dataset, run_name, t_0_idx=1
         )
-        mse_val = torch.mean((height_data[1:] - pred_traj) ** 2)
-        error_vals.append(mse_val)
+        error = (height_data[1:] - pred_traj) ** 2
+        error_vals.append(torch.mean(error))
+        error_std.append(torch.std(error))
         plot_error_maps(log_loader, dataset, run_name, height_data[1:], pred_traj, title=run_name)
-        # plot_drop_flow()..... for h and h_\theta
+        # plot_drop_flow(log_loader, dataset.data, viz_file, height_data[50], title=r"$\mathbf{v}(t,r,z)$")
+        # plot_drop_flow(log_loader, dataset.data, viz_file, pred_traj[49], title=r"$\mathbf{v}_\theta(t,r,z)$")
+        # plot_volume_comp_over_time(log_loader, dataset.data, viz_file, height_data[1:], pred_traj, title="")
+        # plot_cotact_line_over_time(log_loader, dataset.data, viz_file, height_data[1:], pred_traj, title="")
+        # plot_total_flux_over_time(log_loader, dataset, viz_file, height_data, model, title="")
 
-    plt.scatter(range(1, len(error_vals) + 1), error_vals)
-    plt.xticks(range(1, len(error_vals) + 1), labels=list(dataset.data.keys()))
-    plt.ylabel("MSE")
-    plt.title("Mean Squared Error per Dataset")
+
+    error_vals = np.array(error_vals)
+    error_std = np.array(error_std)
+    plt.figure(figsize=(4,3))
+    std_clipped = np.minimum(error_std, error_vals)
+    x = range(1, len(error_vals) + 1)
+    plt.scatter(x, np.sqrt(error_vals), color='k')
+    # plt.errorbar(x, np.sqrt(error_vals), yerr=np.sqrt(std_clipped), capsize=5, elinewidth=1, color='k', marker='o', markersize=6, linewidth=0)
+    # plt.sca(x, np.sqrt(error_vals), yerr=np.sqrt(std_clipped), capsize=5, elinewidth=1, color='k', marker='o', markersize=6, linewidth=0)
+    plt.xticks(x, labels=list(dataset.data.keys()))
+    plt.ylabel(r"$RMSE\, [m]$")
+    # plt.yscale("log")
+    plt.xlabel("Experiment #")
+    # plt.title("Mean Squared Error per Dataset")
     log_loader.show(plt)
 
 
@@ -286,10 +302,11 @@ def plot_error_maps(log_loader, dataset, viz_file, profile_data, pred_traj, titl
 
 def plot_train_val_error(log_loader, train_losses, val_losses):
     # Plot the training and validation losses
-    plt.plot(train_losses, label="Train Loss", c="dimgray")
-    plt.plot(val_losses, label="Val Loss", c="r")
+    x = range(1, len(train_losses)+1)
+    plt.plot(x, train_losses, label="Train Loss", c="dimgray")
+    plt.plot(x, val_losses, label="Val Loss", c="r")
     plt.xlabel("Epoch")
-    plt.ylabel("MSE Loss")
+    plt.ylabel("MSE")
     # plt.xscale('log')
     plt.yscale("log")
     plt.legend()
@@ -307,8 +324,38 @@ def plot_profile_stack(log_loader, profiles, title=""):
 
 
 
-def plot_drop_flow(log_loader, dataset, viz_file, profile_data, pred_traj, title=""):
-    drop_params, dt = drop_utils.load_drop_params_from_data(dataset.data)
+def plot_drop_flow(log_loader, data, viz_file, profile, title=""):
+
+    profile -= 1e-7
+    profile = torch.clamp(profile, min=0)  # ensure non-negative height
+    # h = drop_utils.symmetrize(h) # may be needed
+    profile = drop_utils.drop_polynomial_fit(
+        profile, 8
+    )  # project height on polynomial basis
+    profile = drop_utils.symmetrize(profile)
+    profile = torch.clamp(profile, min=0)
+
+
+    t_lin = data[viz_file]["t_lin"]
+    r_lin = data[viz_file]["r_lin"]
+    z_lin = data[viz_file]["z_lin"] /5#* 1.3 #/ 5
+    dt = t_lin[1] - t_lin[0]
+    dr = r_lin[1] - r_lin[0]
+    dz = z_lin[1] - z_lin[0]
+
+    drop_params = drop_utils.SimulationParams(
+        r_grid=torch.max(r_lin),
+        hmax0=torch.max(z_lin),
+        Nr=r_lin.shape[0],
+        Nz=z_lin.shape[0],
+        dr=dr,
+        dz=dz,
+        # defining these here just creates opportunities to mess them up probably
+        rho=1,
+        sigma=0.072,
+        eta=1e-3,
+    )
+    # drop_params, dt = drop_utils.load_drop_params_from_data(data)
     def smoothing_fn(x): # reconfigure this into flow post function to be consistent
         return drop_utils.gaussian_blur_1d(x, sigma=10)
     drop_model = pure_drop_model.PureDropModel(drop_params, smoothing_fn=smoothing_fn)
@@ -318,20 +365,18 @@ def plot_drop_flow(log_loader, dataset, viz_file, profile_data, pred_traj, title
     # profile_data = profile_data[:, profile_data.shape[1] // 2 :]
     # pred_traj = pred_traj[:, pred_traj.shape[1] // 2 :]
 
-    t_lin = dataset.data[viz_file]["t_lin"]
-    r_lin = dataset.data[viz_file]["r_lin"]
+    # t_lin = data[viz_file]["t_lin"]
+    # r_lin = data[viz_file]["r_lin"]
     if r_lin[0] >= 0.0:
         r_lin -= torch.mean(r_lin)
-    
-    h = profile_data[10]
 
-    u_grid = drop_model.calc_u_velocity(h)
-    w_grid = drop_model.calc_w_velocity(h, u_grid)
+    u_grid = drop_model.calc_u_velocity(profile)
+    w_grid = drop_model.calc_w_velocity(profile, u_grid)
     flow_magnitude = torch.sqrt(u_grid**2 + w_grid**2)
     # if log_mag:
     #     flow_magnitude = torch.log(flow_magnitude)
-    # flow_magnitude = set_nans_in_center(flow_magnitude, center_mask)
-    # flow_magnitude = set_nans_in_corners(flow_magnitude, corner_mask)
+    flow_magnitude = drop_viz.set_nans_in_center(flow_magnitude, 6)
+    flow_magnitude = drop_viz.set_nans_in_corners(flow_magnitude, 3)
     flow_magnitude[flow_magnitude == 0.0] = torch.nan
 
     # plt.figure(figsize=(6, 3))
@@ -349,7 +394,7 @@ def plot_drop_flow(log_loader, dataset, viz_file, profile_data, pred_traj, title
         cmap="magma",
     )
     plt.plot(
-        drop_model.r, h, color="k", linewidth=2, label="$h(r)$"
+        drop_model.r, profile, color="k", linewidth=2, label="$h(r)$"
     )  # Overlay height profile
 
     # Create a meshgrid for quiver plot
@@ -393,10 +438,13 @@ def plot_drop_flow(log_loader, dataset, viz_file, profile_data, pred_traj, title
     plt.gca().xaxis.set_major_locator(plt.MaxNLocator(5))
     plt.gca().yaxis.set_major_locator(plt.MaxNLocator(5))
 
+    plt.xlim([0.0, r_lin[-1]])
+
     plt.xlabel("Radius (m)")
     plt.ylabel("Height (m)")
     plt.colorbar(label=r"$||v(r, z)||$")
-    plt.title(r"$v(r, z)$")
+    # plt.title(r"$v(r, z)$")
+    plt.title(title)
     plt.grid(False)
     plt.tight_layout()
     plt.legend()
@@ -404,3 +452,184 @@ def plot_drop_flow(log_loader, dataset, viz_file, profile_data, pred_traj, title
     plt.tight_layout()
     log_loader.show(plt)
 
+
+def plot_volume_comp_over_time(log_loader, data, viz_file, profile_hist, pred_hist, title=""):
+    t_lin = data[viz_file]["t_lin"]
+    r_lin = data[viz_file]["r_lin"]
+    
+    data_volume_hist = 2 * torch.pi * torch.sum(torch.abs(profile_hist*r_lin), axis=1) / 2
+    pred_volume_hist = 2 * torch.pi * torch.sum(torch.abs(pred_hist*r_lin), axis=1) / 2
+
+    fig, ax1 = plt.subplots(figsize=(5, 4))
+
+    # Plot V(t) and V_\theta(t) on the primary y-axis (left)
+    ax1.plot(t_lin[1:], data_volume_hist, label=r"$V(t)$", color="k", zorder=20)
+    ax1.plot(t_lin[1:], pred_volume_hist, label=r"$V_\theta(t)$", ls="--", color="r", zorder=30)
+
+    # Customize the primary y-axis
+    ax1.set_ylabel(r"$V\, [m^3]$")
+    ax1.set_xlabel(r"$t\, [s]$")
+    ax1.legend(loc="upper left")
+
+    ax1.yaxis.set_major_locator(ticker.MaxNLocator(4))
+    formatter = ticker.ScalarFormatter(useMathText=True)
+    formatter.set_scientific(True)
+    formatter.set_powerlimits((-2, 2))
+    ax1.yaxis.set_major_formatter(formatter)
+
+    # Create a secondary y-axis for V(t) - V_\theta(t)
+    ax2 = ax1.twinx()
+    ax2.plot(t_lin[1:], torch.abs(data_volume_hist - pred_volume_hist), label=r"$|V(t) - V_\theta(t)|$", linestyle="-", color="dimgrey", alpha=0.5, zorder=40)
+
+    # Customize the secondary y-axis
+    ax2.set_ylabel(r"$|V(t) - V_\theta(t)|\, [m^3]$")
+    ax2.legend(loc="upper right")
+
+    ax2.yaxis.set_major_locator(ticker.MaxNLocator(4))
+    ax2.yaxis.set_major_formatter(formatter)
+
+    # Adjust layout
+    fig.tight_layout()
+
+    # Show the plot using log_loader
+    log_loader.show(plt)
+
+def plot_cotact_line_over_time(log_loader, data, viz_file, profile_hist, pred_hist, title=""):
+    t_lin = data[viz_file]["t_lin"]
+    r_lin = data[viz_file]["r_lin"]
+
+    def last_index_above_threshold(tensor, threshold):
+        mask = tensor > threshold
+        indices = torch.where(mask.any(dim=1), mask.int().argmax(dim=1), -1)
+        return indices
+    
+    data_rc_hist = last_index_above_threshold(profile_hist, 1e-7)
+    data_rc_hist = r_lin[data_rc_hist]
+    data_rc_hist[data_rc_hist>0] = 0
+    data_rc_hist *= -1
+    pred_rc_hist = last_index_above_threshold(pred_hist, 1e-7)
+    pred_rc_hist = r_lin[pred_rc_hist]
+    pred_rc_hist[pred_rc_hist>0] = 0
+    pred_rc_hist *= -1
+
+    fig, ax1 = plt.subplots(figsize=(5, 4))
+
+    # Plot V(t) and V_\theta(t) on the primary y-axis (left)
+    ax1.plot(t_lin[1:], data_rc_hist, label=r"$r_c(t)$", color="k", zorder=20)
+    ax1.plot(t_lin[1:], pred_rc_hist, label=r"$r_{c, \theta}(t)$", ls="--", color="r", zorder=30)
+
+    # Customize the primary y-axis
+    ax1.set_ylabel(r"$r_c\, [m]$")
+    ax1.set_xlabel(r"$t\, [s]$")
+    ax1.legend(loc="upper left")
+
+    ax1.yaxis.set_major_locator(ticker.MaxNLocator(4))
+    formatter = ticker.ScalarFormatter(useMathText=True)
+    formatter.set_scientific(True)
+    formatter.set_powerlimits((-2, 2))
+    ax1.yaxis.set_major_formatter(formatter)
+
+    # Create a secondary y-axis for V(t) - V_\theta(t)
+    ax2 = ax1.twinx()
+    ax2.plot(t_lin[1:], torch.abs(data_rc_hist - pred_rc_hist), label=r"$|r_c(t) - r_{c, \theta}(t)|$", linestyle="-", color="dimgrey", alpha=0.5, zorder=40)
+
+    # Customize the secondary y-axis
+    ax2.set_ylabel(r"$|r_c(t) - r_{c, \theta}(t)|\, [m]$")
+    ax2.legend(loc="upper right")
+
+    ax2.yaxis.set_major_locator(ticker.MaxNLocator(4))
+    ax2.yaxis.set_major_formatter(formatter)
+
+    # Adjust layout
+    fig.tight_layout()
+
+    # Show the plot using log_loader
+    log_loader.show(plt)
+
+
+def plot_total_flux_over_time(log_loader, dataset, viz_file, profile_hist, model, title=""):
+    # only works with flux-FNO
+    t_lin = dataset.data[viz_file]["t_lin"]
+    r_lin = dataset.data[viz_file]["r_lin"]
+
+    t_0_idx = 0
+
+    with torch.no_grad():
+        conditioning = dataset.get_conditioning(dataset.data[viz_file]).unsqueeze(0)
+        evap_model = model.ode_func.model.evap_model #(h0, z)
+        scaled_profiles = profile_hist * dataset.profile_scale
+        print(conditioning.shape)
+        stacked_z = conditioning.repeat(scaled_profiles.shape[0], 1)
+        print(stacked_z.shape)
+        fluxes = evap_model(scaled_profiles, stacked_z)
+        fluxes /= dataset.profile_scale
+
+    plt.figure(figsize=(4,3))
+    data_idx = np.linspace(0, len(fluxes) - 1, 4, dtype=int) # dont use last
+    plt.plot(r_lin, fluxes[data_idx[0]], label=rf"$f_\theta(h_{{t={data_idx[0]+1}}})$")
+    plt.plot(r_lin, fluxes[data_idx[1]], label=rf"$f_\theta(h_{{t={data_idx[1]+1}}})$")
+    plt.plot(r_lin, fluxes[data_idx[2]], label=rf"$f_\theta(h_{{t={data_idx[2]+1}}})$")
+    plt.xlim(0, r_lin[-1])
+    plt.xlabel(r"$r\, [m]$")
+    plt.ylabel(r"$\mathcal{E}\, [kg/s]$") # units???
+    plt.legend()
+    log_loader.show(plt)
+    
+    total_model_flux = 2 * torch.pi * torch.sum(torch.abs(fluxes*r_lin), axis=1) / 2
+
+    plt.plot(total_model_flux)
+    log_loader.show(plt)
+
+    data_volume_hist = 2 * torch.pi * torch.sum(torch.abs(profile_hist*r_lin), axis=1) / 2
+
+    total_model_flux = torch.min(torch.stack([data_volume_hist, total_model_flux]), axis=0)[0]
+    print(total_model_flux.shape)
+
+    empirical_mass_flux = -1 * (data_volume_hist[1:]-data_volume_hist[:-1])
+    extra_mass_flux = total_model_flux[1:] - empirical_mass_flux
+
+    plt.plot(total_model_flux, label="model flux")
+    plt.plot(empirical_mass_flux, label="observed mass flux")
+    plt.plot(extra_mass_flux, label="difference")
+    plt.legend()
+    log_loader.show(plt)
+    
+    # data_rc_hist = last_index_above_threshold(profile_hist, 1e-4)
+    print(torch.min(profile_hist,axis=0))
+    mask = profile_hist > 1e-7
+    data_rc_hist = torch.where(mask.any(dim=1), mask.int().argmax(dim=1), -1)
+    data_rc_hist = r_lin[data_rc_hist]
+    data_rc_hist[data_rc_hist>0] = 0
+    data_rc_hist *= -1
+
+    # plt.plot(data_rc_hist)
+    
+    r_lin_as = r_lin[r_lin.shape[0]//2:]
+    mass_deposition = torch.zeros_like(r_lin_as)
+    sigma = torch.max(r_lin_as)/100  # Standard deviation of the Gaussian kernel
+
+    print(r_lin_as)
+    print(data_rc_hist)
+    print(r_lin_as.shape)
+    print(data_rc_hist.shape)
+    print("sigma", sigma)
+
+    extra_mass_flux = torch.abs(extra_mass_flux)
+
+    # Loop through each time step and deposit mass
+    for t in range(len(data_rc_hist)-1):
+        # Create a Gaussian kernel centered at the interface position r[t]
+        gaussian_kernel = torch.exp(-((r_lin_as - data_rc_hist[t]) ** 2) / (2 * sigma ** 2))
+        gaussian_kernel /= (np.sqrt(2 * torch.pi) * sigma)  # Normalize the kernel
+
+        # Scale the kernel by the mass added at this time step
+        mass_contribution = gaussian_kernel * extra_mass_flux[t]
+
+        # Add the contribution to the mass deposited array
+        mass_deposition = mass_deposition + mass_contribution
+    mass_deposition = torch.tensor(mass_deposition)
+    
+    plt.plot(r_lin_as, mass_deposition)
+    plt.ylabel("Mass deposited")
+    plt.xlabel(r"$r\, [m]$")
+    log_loader.show(plt)
