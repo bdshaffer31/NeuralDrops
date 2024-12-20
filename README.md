@@ -5,7 +5,11 @@ Modeling droplet evaporation dynamics with Fourier Neural Operators, finite diff
 
 ## Overview
 
-**NeuralDrOps** is a research project focused on simulating droplet evaporation dynamics using neural ordinary differential equations (ODEs) and learned control volumes. This approach combines physical modeling with machine learning techniques to accurately predict the behavior of evaporating droplets.
+**NeuralDrOps** is a project focused on simulating droplet evaporation dynamics using neural ordinary differential equations (ODEs) and learned control volumes. This approach combines physical modeling with machine learning techniques to accurately predict the behavior of evaporating droplets.
+
+This was submitted as a final project for UPenn ENM 5310 by Ben Shaffer and Michael Machold.
+
+Please see the report for more details.
 
 ## Features
 
