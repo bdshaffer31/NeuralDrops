@@ -40,17 +40,33 @@ def setup_polynomial_initial_h_profile(r, h0, r_c, drop_fraction=1.0, order=2):
 
 
 def setup_cap_initial_h_profile(r_cap, h0, r_c):
-    h = torch.zeros_like(r_cap)
-    num_c = list(map(lambda i: i >= -r_c, r_cap)).index(True) + 1
+
+    film = h0 / 100
+
+    h = torch.zeros_like(r_cap) #+ film
+    
+    num_c = list(map(lambda i: i >= -r_c, r_cap)).index(True)
     # setup a spherical cap initial height profile
     R = (r_c**2 + h0**2) / (2 * h0)
     # theta = torch.arccos(torch.tensor([1 - h0 * R]))
+    #h[num_c:-(num_c)] = torch.sqrt(
+    #    (
+    #        2.0 * R * (r_cap[num_c:-(num_c)] + R)
+    #        - torch.square(r_cap[num_c:-(num_c)] + R)
+    #    )
+    #) - (R - h0)
     h[num_c:-(num_c)] = torch.sqrt(
         (
-            2.0 * R * (r_cap[num_c:-(num_c)] + R)
-            - torch.square(r_cap[num_c:-(num_c)] + R)
+            R ** 2
+            - torch.square(r_cap[num_c:-(num_c)])
         )
     ) - (R - h0)
+
+    num_film = list(map(lambda i: i >= film, h)).index(True)
+
+    h[0:num_film] = film
+    h[-(num_film):] = film
+
     # h = torch.sqrt((2.0 * R * (r + R) - torch.square(r + R))) - (R - h0)
 
     return h
@@ -160,6 +176,41 @@ def drop_polynomial_fit(h_0, degree=3):
     h_shifted = torch.roll(h_0_fitted_full, shifts=shift)
 
     return h_shifted
+
+def drop_polynomial_fit_v2(h_0, degree=3):
+    """
+    Fit a polynomial of a given degree to the non-zero interior portion of h_0.
+    """
+    # Identify the non-zero region
+    # non_zero_indices = torch.nonzero(h_0, as_tuple=True)[0]
+    mask = torch.abs(h_0) > 1e-8
+    non_zero_indices = torch.where(mask)[0]
+    if len(non_zero_indices) == 0:
+        return h_0  # If there are no non-zero elements, return the original tensor
+    start_idx = non_zero_indices[0]
+    end_idx = non_zero_indices[-1] + 1
+    h_0_nonzero = h_0[start_idx:end_idx]
+    x_nonzero = torch.linspace(0, 1, steps=h_0_nonzero.shape[0], dtype=torch.float64)
+
+    # Fit a polynomial of the given degree to the non-zero portion
+    # Construct the Vandermonde matrix
+    powers = torch.arange(degree + 1, dtype=torch.float64)
+    A = x_nonzero.unsqueeze(1) ** powers
+    #A = A.to(torch.float32)
+    A = A.to(torch.float64)
+    #print(h_0_nonzero.shape)
+    h_coeffs = h_0_nonzero.unsqueeze(1)
+    #print(h_coeffs.shape)
+    coeffs, *_ = torch.linalg.lstsq(A, h_coeffs)
+    h_0_fitted = (A @ coeffs).squeeze(1)
+
+    h_0_fitted_full = h_0.clone()
+    h_0_fitted_full[start_idx:end_idx] = h_0_fitted
+
+    #shift = int(h_0.shape[0] // 2 - (end_idx + start_idx) / 2)
+    #h_shifted = torch.roll(h_0_fitted_full, shifts=shift)
+
+    return h_0_fitted_full
 
 
 def drop_polynomial_fit_batch_vmap(h_batch, degree=3):

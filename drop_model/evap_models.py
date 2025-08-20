@@ -52,13 +52,13 @@ def deegan_evap_model(evap_params, params, r, h):
     #        -r_c_current, r_c_current, (end_idx - start_idx)
     #    )  # r grid (avoiding r=0)
 
-    if min(h) > 0.001 * params.hmax0:
-        num_c = list(map(lambda i: i > 0.001 * params.hmax0, h)).index(True)
+    if min(h) > 0.01 * params.hmax0:
+        num_c = list(map(lambda i: i > 0.01 * params.hmax0, h)).index(True)
         #mask = torch.abs(h) > 1.0e-2 * params.hmax0
         #non_zero_indices = torch.where(mask)[0]
         #num_c = non_zero_indices[0]
         #num_c = int(num_c)
-        r_c_current = -r[num_c]
+        r_c_current = -r[num_c] + params.dr * 2
         theta_current = 2 * torch.arctan(h_max_current / r_c_current)
 
         # m_dot[start_idx:end_idx] = mass_loss(params, r_flux, theta_current, r_c_current)

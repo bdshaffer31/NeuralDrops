@@ -65,7 +65,6 @@ def plot_height_profile_evolution(r, h_profiles, params, n_lines=5):
     plt.tight_layout()
     plt.show()
 
-
 def inspect(drop_model, h):
     # compute values we want to plot (one forward pass broken out in components)
     dh_dr = grad(h, drop_model.params.dr)
@@ -108,6 +107,68 @@ def inspect(drop_model, h):
     plt.plot(flow_dh_dt, label="flow_dh_dt")
     plt.legend()
     plt.show()
+
+
+def inspect_Sphere_Cap(drop_model, h, r_cap, h_fit):
+
+    def analytic_dh_dr (r, r_c, h0):
+        R = (r_c**2+h0**2)/(2*h0)
+        dh_dr = (-r)/ torch.sqrt((R**2-torch.square(r)))
+        d2h_dr2 = -R**2 / torch.sqrt(R**2-torch.square(r))**3
+        return dh_dr, d2h_dr2
+
+    # compute values we want to plot (one forward pass broken out in components)
+    dh_dr = grad(h, drop_model.params.dr)
+    curvature = drop_model.calc_curvature(h)
+    d_curvature_dr = grad(curvature, drop_model.params.dr)
+    pressure = drop_model.calc_pressure(h)
+    pressure_2 = drop_model.calc_pressure_v2(h)
+    dp_dr = grad(pressure, drop_model.params.dr)
+    u_grid = drop_model.calc_u_velocity(h)
+    integral_u_r = torch.trapezoid(
+        drop_model.r.unsqueeze(1) * u_grid, dx=drop_model.params.dz, dim=1
+    )
+    grad_u_r = grad(integral_u_r, drop_model.params.dr)
+    flow_dh_dt = drop_model.calc_flow_dh_dt(h)
+
+    #print(drop_model.r)
+    #print(r_c)
+    dh_dr_2, d2h_dr2_2 = analytic_dh_dr (drop_model.r, r_cap, 0.8* drop_model.params.hmax0)
+
+    plt.plot(h, label="h")
+    plt.plot(h_fit, label="h_fit")
+    plt.legend()
+    plt.show()
+
+    plt.plot(dh_dr, label="dh/dr")
+    plt.plot(dh_dr_2, label="dh/dr")
+    plt.legend()
+    plt.show()
+
+    #plt.plot(curvature / torch.max(torch.abs(curvature)), label="curvature")
+    #plt.plot(
+    #    d_curvature_dr / torch.max(torch.abs(d_curvature_dr)), label="d curvature / dr"
+    #)
+    #plt.legend()
+    #plt.show()
+
+    plt.plot(pressure, label="pressure")
+    plt.plot(pressure_2, label="pressure_2")
+    #plt.plot(dp_dr / torch.max(torch.abs(dp_dr)), label="dp/dr")
+    plt.title(
+        f"p max: {torch.max(torch.abs(pressure))}, std: {torch.std(pressure)}, \n pgrad max: {torch.max(torch.abs(dp_dr))}"
+    )
+    plt.legend()
+    plt.show()
+
+    #plt.plot(integral_u_r / torch.max(torch.abs(integral_u_r)), label="integral_u_r")
+    #plt.plot(grad_u_r / torch.max(torch.abs(grad_u_r)), label="grad_u_r")
+    #plt.legend()
+    #plt.show()
+
+    #plt.plot(flow_dh_dt, label="flow_dh_dt")
+    #plt.legend()
+    #plt.show()
 
 
 def plot_velocity(drop_model, h, center_mask=6, corner_mask=3):
